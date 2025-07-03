@@ -1,0 +1,10 @@
+---
+BasedOnStyle: Google
+AlignAfterOpenBracket: BlockIndent
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+PenaltyBreakAssignment: 70
+PenaltyBreakBeforeFirstCallParameter: 0
+PointerAlignment: Right
+QualifierAlignment: Right

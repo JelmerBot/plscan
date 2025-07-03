@@ -1,0 +1,75 @@
+cmake_minimum_required(VERSION 3.18...3.26)
+project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# - Warn if the user invokes CMake directly
+if (NOT SKBUILD)
+    message(WARNING "\
+  This CMake file is meant to be executed using 'scikit-build-core'.
+  Running it directly will almost certainly not produce the desired
+  result. If you are a user trying to install this package, use the
+  command below, which will install all necessary build dependencies,
+  compile the package in an isolated environment, and then install it.
+  =====================================================================
+   $ pip install .
+  =====================================================================
+  If you are a software developer, and this is your own package, then
+  it is usually much more efficient to install the build dependencies
+  in your environment once and use the following command that avoids
+  a costly creation of a new virtual environment at every compilation:
+  =====================================================================
+   $ pip install nanobind scikit-build-core[pyproject]
+   $ pip install --no-build-isolation -ve .
+  =====================================================================
+  You may optionally add --config-settings editable.rebuild=true to 
+  auto-rebuild when the package is imported. Otherwise, you need to 
+  rerun the above after editing C++ files.")
+endif ()
+
+# - Build type
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif ()
+message(STATUS "Creating a ${CMAKE_BUILD_TYPE} build")
+
+# - Find Python
+find_package(Python 3.8
+        REQUIRED COMPONENTS Interpreter Development.Module
+        OPTIONAL_COMPONENTS Development.SABIModule)
+
+# - Find NanoBind
+execute_process(
+        COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+        OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+find_package(nanobind CONFIG REQUIRED)
+
+# - Find module source-file
+# The build command `pip install ...` re-runs cmake on every call!
+# Treats all cpp files as extension modules.
+# Includes all top-level .h files as source file.
+set(SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/src/${SKBUILD_PROJECT_NAME})
+file(GLOB_RECURSE EXT_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${SRC_PATH}/*.cpp)
+foreach (EXT_SOURCE ${EXT_SOURCES})
+    # Create variables for the extension name, stub, and destination
+    get_filename_component(EXT_NAME ${EXT_SOURCE} NAME_WE)
+    get_filename_component(EXT_DIR ${EXT_SOURCE} DIRECTORY)
+    cmake_path(RELATIVE_PATH EXT_DIR BASE_DIRECTORY ${SRC_PATH})
+    set(EXT_STUB ${EXT_NAME}_stub)
+    set(EXT_STUB_OUT ${EXT_NAME}.pyi)
+    set(EXT_DESTINATION ${SKBUILD_PROJECT_NAME}/${EXT_DIR})
+    message(STATUS "Found extension: ${EXT_DESTINATION}${EXT_NAME}")
+
+    # Add speed optimized module target
+    nanobind_add_module(${EXT_NAME} NOMINSIZE STABLE_ABI LTO NB_DOMAIN ${SKBUILD_PROJECT_NAME} ${EXT_SOURCE})
+    nanobind_add_stub(
+            ${EXT_STUB}
+            MODULE ${EXT_NAME}
+            OUTPUT ${EXT_STUB_OUT}
+            PYTHON_PATH $<TARGET_FILE_DIR:${EXT_NAME}>
+            DEPENDS ${EXT_NAME}
+    )
+    install(TARGETS ${EXT_NAME} LIBRARY DESTINATION ${EXT_DESTINATION})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_STUB_OUT} DESTINATION ${EXT_DESTINATION})
+endforeach ()

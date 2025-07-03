@@ -1,0 +1,7 @@
+build/
+*.pytest_cache/
+.idea/
+cmake-build*/
+
+__pycache__/
+src/plscan/_version.py
