@@ -1,6 +1,5 @@
 #include "_condense_tree.h"
 
-#include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
 
 #include <optional>
@@ -31,23 +30,21 @@ struct CondenseState {
 
   explicit CondenseState(
       CondensedTreeView condensed_tree, LinkageTreeView const linkage_tree,
-      SpanningTreeView const spanning_Tree
+      SpanningTreeView const spanning_tree, size_t const num_points
   )
       : condensed_tree(condensed_tree),
         linkage_tree(linkage_tree),
-        spanning_tree(spanning_Tree),
-        parent_of(spanning_Tree.size()),
-        pending_idx(spanning_Tree.size()),
-        pending_distance(spanning_Tree.size()) {
-    parent_of.back() = spanning_Tree.size() + 1u;
-  }
+        spanning_tree(spanning_tree),
+        parent_of(num_points - 1u, num_points),
+        pending_idx(num_points - 1u),
+        pending_distance(num_points - 1u) {}
 
   template <typename function_t>
   auto process_rows(
-      float const min_size, float const max_size, function_t get_row
+      size_t const num_points, float const min_size, float const max_size,
+      function_t get_row
   ) {
     size_t const num_edges = linkage_tree.size();
-    size_t const num_points = num_edges + 1u;
     size_t next_label = num_points;
     size_t cluster_count = 0u;
     size_t idx = 0u;
@@ -184,26 +181,29 @@ struct CondenseState {
       RowInfo const &row, size_t &idx, size_t &cluster_count,
       size_t &next_label, size_t const num_points
   ) {
+    // Adjust numbering for phantom root and real roots
+    uint64_t const parent = row.parent == num_points ? ++next_label
+                                                     : row.parent;
     // Introduces new parent labels and appends rows for the merge
     parent_of[row.left - num_points] = ++next_label;
     condensed_tree.cluster_rows[cluster_count++] = idx;
-    write_row(idx, row.parent, row.distance, next_label, row.left_size);
+    write_row(idx, parent, row.distance, next_label, row.left_size);
     parent_of[row.right - num_points] = ++next_label;
     condensed_tree.cluster_rows[cluster_count++] = idx;
-    write_row(idx, row.parent, row.distance, next_label, row.right_size);
+    write_row(idx, parent, row.distance, next_label, row.right_size);
   }
 };
 
 std::pair<size_t, size_t> process_hierarchy(
     CondensedTreeView tree, LinkageTreeView const linkage,
-    SpanningTreeView const mst, float const min_size, float const max_size,
-    std::optional<array_ref<float>> const sample_weights
+    SpanningTreeView const mst, size_t const num_points, float const min_size,
+    float const max_size, std::optional<array_ref<float>> const sample_weights
 ) {
   nb::gil_scoped_release guard{};
-  CondenseState state{tree, linkage, mst};
+  CondenseState state{tree, linkage, mst, num_points};
   if (sample_weights) {
     return state.process_rows(
-        min_size, max_size,
+        num_points, min_size, max_size,
         [&state,
          weights = std::span(sample_weights->data(), sample_weights->size())](
             size_t const node_idx, size_t const num_points
@@ -211,7 +211,7 @@ std::pair<size_t, size_t> process_hierarchy(
     );
   }
   return state.process_rows(
-      min_size, max_size,
+      num_points, min_size, max_size,
       [&state](size_t const node_idx, size_t const num_points) {
         return state.get_row(node_idx, num_points);
       }
@@ -219,12 +219,14 @@ std::pair<size_t, size_t> process_hierarchy(
 }
 
 CondensedTree compute_condensed_tree(
-    LinkageTree const linkage, SpanningTree const mst, float const min_size,
-    float const max_size, std::optional<array_ref<float>> const sample_weights
+    LinkageTree const linkage, SpanningTree const mst, size_t const num_points,
+    float const min_size, float const max_size,
+    std::optional<array_ref<float>> const sample_weights
 ) {
   auto [tree_view, tree_cap] = CondensedTree::allocate(linkage.size());
   auto [filled_edges, cluster_count] = process_hierarchy(
-      tree_view, linkage.view(), mst.view(), min_size, max_size, sample_weights
+      tree_view, linkage.view(), mst.view(), num_points, min_size, max_size,
+      sample_weights
   );
   return {tree_view, std::move(tree_cap), filled_edges, cluster_count};
 }
@@ -265,24 +267,24 @@ NB_MODULE(_condense_tree, m) {
 
         Parameters
         ----------
-        parent : numpy.ndarray[dtype=uint64, shape=(*)]
+        parent : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             An array of parent cluster indices. Clusters are labelled
             with indices starting from the number of points.
-        child : numpy.ndarray[dtype=uint64, shape=(*)]
+        child : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             An array of child node and cluster indices. Clusters are labelled
             with indices starting from the number of points.
-        distance : numpy.ndarray[dtype=float32, shape=(*)]
+        distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The distance at which the child side connects to the parent side.
-        child_size : numpy.ndarray[dtype=float32, shape=(*)]
+        child_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The (weighted) size in the child side of the link.
-        cluster_rows : numpy.ndarray[dtype=uint64, shape=(*)]
+        cluster_rows : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             The row indices with a cluster as child.
       )";
 
   m.def(
       "compute_condensed_tree", &compute_condensed_tree,
       nb::arg("linkage_tree"), nb::arg("minimum_spanning_tree"),
-      nb::arg("min_cluster_size") = 5.0f,
+      nb::arg("num_points"), nb::arg("min_cluster_size") = 5.0f,
       nb::arg("max_cluster_size") = std::numeric_limits<float>::infinity(),
       nb::arg("sample_weights") = nb::none(),
       R"(
@@ -301,7 +303,7 @@ NB_MODULE(_condense_tree, m) {
         max_cluster_size : float, optional
             The maximum size of clusters to be included in the condensed tree.
             Default is np.inf.
-        sample_weights : numpy.ndarray[dtype=float32, shape=(*)], optional
+        sample_weights : numpy.ndarray[tuple[int], np.dtype[np.float32]], optional
             The data point sample weights. If not provided, all points get an
             equal weight. Must have a value for each data point!
 

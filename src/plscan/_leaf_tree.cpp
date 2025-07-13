@@ -1,16 +1,14 @@
 #include "_leaf_tree.h"
 
-#include <nanobind/nanobind.h>
-
 #include <algorithm>
 
 #include "_condense_tree.h"
 
 void fill_min_dist(
-    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree
+    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
+    size_t const num_points
 ) {
   // last occurrence in the condensed tree!
-  size_t const num_points = condensed_tree.parent[0];
   for (size_t idx = 0; idx < condensed_tree.size(); ++idx) {
     size_t const parent_idx = condensed_tree.parent[idx] - num_points;
     leaf_tree.min_distance[parent_idx] = condensed_tree.distance[idx];
@@ -18,30 +16,33 @@ void fill_min_dist(
 }
 
 void fill_parent_and_max_dist(
-    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree
+    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
+    size_t const num_points
 ) {
-  // visit all cluster rows.
-  size_t const num_points = condensed_tree.parent[0];
-  leaf_tree.parent[0] = num_points;
-  leaf_tree.max_distance[0] = condensed_tree.distance[0];
-  for (size_t const &idx : condensed_tree.cluster_rows) {
+  // fill default values to match the phantom root cluster.
+  size_t const num_leaves = leaf_tree.size();
+  std::fill_n(leaf_tree.parent.begin(), num_leaves, 0u);
+  std::fill_n(
+      leaf_tree.max_distance.begin(), num_leaves, condensed_tree.distance[0]
+  );
+
+  // fill in actual values for non-root clusters.
+  for (size_t const idx : condensed_tree.cluster_rows) {
     size_t const child_idx = condensed_tree.child[idx] - num_points;
-    leaf_tree.parent[child_idx] = condensed_tree.parent[idx];
+    leaf_tree.parent[child_idx] = condensed_tree.parent[idx] - num_points;
     leaf_tree.max_distance[child_idx] = condensed_tree.distance[idx];
   }
 }
 
 void fill_sizes(
     LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
-    float const min_size
+    size_t const num_points, float const min_size
 ) {
-  size_t const num_leaves = leaf_tree.size();
-  size_t const num_points = condensed_tree.parent[0];
-  size_t const num_clusters = condensed_tree.cluster_rows.size();
-  leaf_tree.max_size[0] = static_cast<float>(num_points);
+  // fill in default min size values
+  std::fill_n(leaf_tree.min_size.begin(), leaf_tree.size(), min_size);
 
   // reverse cluster row pairs.
-  std::fill_n(leaf_tree.min_size.begin(), num_leaves, min_size);
+  size_t const num_clusters = condensed_tree.cluster_rows.size();
   for (size_t _i = 1; _i <= num_clusters; _i += 2) {
     size_t const _row_idx = num_clusters - _i;
     size_t const left_idx = condensed_tree.cluster_rows[_row_idx];
@@ -58,27 +59,74 @@ void fill_sizes(
     leaf_tree.min_size[parent_idx] = std::max(
         {size, leaf_tree.min_size[out_idx - 1u], leaf_tree.min_size[out_idx]}
     );
+    // Update the phantom root min-size for root-parents.
+    if (leaf_tree.parent[parent_idx] == 0)
+      leaf_tree.min_size[0] = std::max(
+          leaf_tree.min_size[0], leaf_tree.min_size[parent_idx]
+      );
   }
+
+  // set the root sizes to largest observed min size to provide an upper
+  // observed size limit (for plotting). Can't know their exact size here...
+  leaf_tree.max_size[0] = static_cast<float>(num_points);
+  for (size_t idx = 1; idx < leaf_tree.size(); ++idx)
+    if (leaf_tree.parent[idx] == 0u)
+      leaf_tree.max_size[idx] = leaf_tree.min_size[0];
 }
 
 void process_clusters(
     LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
-    float const min_size
+    size_t const num_points, float const min_size
 ) {
   nb::gil_scoped_release guard{};
-  fill_min_dist(leaf_tree, condensed_tree);
-  fill_parent_and_max_dist(leaf_tree, condensed_tree);
-  fill_sizes(leaf_tree, condensed_tree, min_size);
+  fill_min_dist(leaf_tree, condensed_tree, num_points);
+  fill_parent_and_max_dist(leaf_tree, condensed_tree, num_points);
+  fill_sizes(leaf_tree, condensed_tree, num_points, min_size);
 }
 
 LeafTree compute_leaf_tree(
-    CondensedTree const condensed_tree, float const min_size
+    CondensedTree const condensed_tree, size_t const num_points,
+    float const min_size
 ) {
-  size_t const num_clusters = condensed_tree.cluster_rows.shape(0) + 1u;
-  auto [leaf_view, leaf_cap] = LeafTree::allocate(num_clusters);
-  process_clusters(leaf_view, condensed_tree.view(), min_size);
-  return {leaf_view, std::move(leaf_cap), num_clusters};
+  CondensedTreeView const condensed_view = condensed_tree.view();
+  size_t const last_cluster_row = condensed_view.cluster_rows.back();
+  size_t const max_label = condensed_view.child[last_cluster_row] - num_points;
+  LeafTree tree{max_label + 1u};
+  process_clusters(tree.view(), condensed_view, num_points, min_size);
+  return tree;
 };
+
+array_ref<int64_t> apply_size_cut(
+    LeafTree const &leaf_tree, float const cut_size
+) {
+  size_t num_selected = 0;
+  auto [out_view, out_cap] = new_buffer<int64_t>(leaf_tree.size());
+  {
+    nb::gil_scoped_release guard{};
+    LeafTreeView const leaf_tree_view = leaf_tree.view();
+    for (int64_t idx = 0; idx < leaf_tree_view.size(); ++idx)
+      if (leaf_tree_view.min_size[idx] <= cut_size &&
+          leaf_tree_view.max_size[idx] > cut_size)
+        out_view[num_selected++] = idx;
+  }
+  return to_array(out_view, std::move(out_cap), num_selected);
+}
+
+array_ref<int64_t> apply_distance_cut(
+    LeafTree const &leaf_tree, float const cut_distance
+) {
+  size_t num_selected = 0;
+  auto [out_view, out_cap] = new_buffer<int64_t>(leaf_tree.size());
+  {
+    nb::gil_scoped_release guard{};
+    LeafTreeView const leaf_tree_view = leaf_tree.view();
+    for (int64_t idx = 0; idx < leaf_tree_view.size(); ++idx)
+      if (leaf_tree_view.min_distance[idx] <= cut_distance &&
+          leaf_tree_view.max_distance[idx] > cut_distance)
+        out_view[num_selected++] = idx;
+  }
+  return to_array(out_view, std::move(out_cap), num_selected);
+}
 
 NB_MODULE(_leaf_tree, m) {
   m.doc() = "Module for leaf tree computation in PLSCAN.";
@@ -115,21 +163,21 @@ NB_MODULE(_leaf_tree, m) {
 
         Parameters
         ----------
-        parent : numpy.ndarray[dtype=uint64, shape=(*)]
+        parent : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             The parent cluster IDs.
-        min_distance : numpy.ndarray[dtype=float32, shape=(*)]
+        min_distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The minimum distance at which the cluster exists.
-        max_distance : numpy.ndarray[dtype=float32, shape=(*)]
+        max_distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The distance at which the cluster connects to its parent.
-        min_size : numpy.ndarray[dtype=float32, shape=(*)]
+        min_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The min_cluster_size at which the cluster becomes a leaf.
-        max_size : numpy.ndarray[dtype=float32, shape=(*)]
+        max_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The min_cluster_size at which the cluster stops being a leaf.
       )";
 
   m.def(
       "compute_leaf_tree", &compute_leaf_tree, nb::arg("condensed_tree"),
-      nb::arg("min_cluster_size") = 5.0f,
+      nb::arg("num_points"), nb::arg("min_cluster_size") = 5.0f,
       R"(
         Computes a leaf tree from a condensed tree.
 
@@ -137,6 +185,8 @@ NB_MODULE(_leaf_tree, m) {
         ----------
         condensed_tree : plscan._condensed_tree.CondensedTree
             The input condensed tree.
+        num_points : int
+            The number of points in the dataset.
         min_cluster_size : float, optional
             The minimum size of clusters to be included in the leaf tree.
 
@@ -149,6 +199,53 @@ NB_MODULE(_leaf_tree, m) {
             the minimum and maximum min_cluster_size thresholds for which the
             clusters are leaves, respectively. Some clusters never become
             leaves, indicated by a min_size larger than the max_size.
+      )"
+  );
+
+  m.def(
+      "apply_size_cut", &apply_size_cut, nb::arg("leaf_tree"),
+      nb::arg("cut_size"),
+      R"(
+        Finds the cluster IDs for leaf-clusters that exist at the 
+        given cut_size threshold. The threshold is interpreted as a
+        birth value in a left-open (birth, death] size interval.
+
+        Parameters
+        ----------
+        leaf_tree : plscan._leaf_tree.LeafTree
+            The input leaf tree.
+        size_cut : float
+            The size threshold for selecting clusters. The threshold is 
+            interpreted as a birth value in a left-open (birth, death] size 
+            interval.
+
+        Returns
+        -------
+        selected_clusters : numpy.ndarray[tuple[int], np.dtype[np.int64]]
+            The cluster IDs for leaf-clusters that exist at the 
+            given cut_size threshold. 
+      )"
+  );
+
+  m.def(
+      "apply_distance_cut", &apply_distance_cut, nb::arg("leaf_tree"),
+      nb::arg("cut_distance"),
+      R"(
+        Finds the cluster IDs for clusters that exist at the given cut distance 
+        threshold.
+
+        Parameters
+        ----------
+        leaf_tree : plscan._leaf_tree.LeafTree
+            The input leaf tree.
+        distance_cut : float
+            The distance threshold for selecting clusters.
+
+        Returns
+        -------
+        selected_clusters : numpy.ndarray[tuple[int], np.dtype[np.int64]]
+            The cluster IDs for clusters that exist at the given distance 
+            threshold. 
       )"
   );
 }

@@ -32,7 +32,7 @@ struct SpanningTree {
   SpanningTree(SpanningTree &&) = default;
   SpanningTree(SpanningTree const &) = default;
 
-  // Python side constructor with stride check.
+  // Python side constructor.
   SpanningTree(
       array_ref<uint64_t> const parent, array_ref<uint64_t> const child,
       array_ref<float> const distance

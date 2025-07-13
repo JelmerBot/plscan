@@ -38,7 +38,7 @@ struct CondensedTree {
   CondensedTree(CondensedTree &&) = default;
   CondensedTree(CondensedTree const &) = default;
 
-  // Python side constructor with stride check.
+  // Python side constructor.
   CondensedTree(
       array_ref<uint64_t> const parent, array_ref<uint64_t> const child,
       array_ref<float> const distance, array_ref<float> const child_size,

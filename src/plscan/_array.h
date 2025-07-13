@@ -1,10 +1,10 @@
 #ifndef PLSCAN_API_ARRAY_H
 #define PLSCAN_API_ARRAY_H
 
+#include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
 #include <memory>
-#include <string>
 
 namespace nb = nanobind;
 

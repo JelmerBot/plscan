@@ -1,6 +1,5 @@
 #include "_persistence_trace.h"
 
-#include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/vector.h>
 
@@ -17,10 +16,9 @@ size_t initialize_trace(
 ) {
   // Copy the size thresholds into the trace_min_size buffer.
   size_t const num_leaves = leaf_tree.size();
-  result.min_size[0] = leaf_tree.min_size[0];
   for (size_t idx = 1; idx < num_leaves; ++idx) {
-    result.min_size[2 * idx - 1u] = leaf_tree.min_size[idx];
-    result.min_size[2 * idx] = leaf_tree.max_size[idx];
+    result.min_size[2 * (idx - 1)] = leaf_tree.min_size[idx];
+    result.min_size[2 * (idx - 1) + 1u] = leaf_tree.max_size[idx];
   }
 
   // Find the (number of) unique sizes
@@ -41,7 +39,9 @@ size_t initialize_trace(
     float const death
 ) {
   auto const begin_it = min_sizes.begin();
-  auto const end_it = std::next(begin_it, trace_size);
+  auto const end_it = std::next(
+      begin_it, static_cast<std::ptrdiff_t>(trace_size)
+  );
   auto const start_it = std::lower_bound(begin_it, end_it, birth);
   auto const stop_it = std::lower_bound(start_it, end_it, death);
   return std::make_pair(
@@ -70,11 +70,11 @@ void fill_persistences(
 }
 
 [[nodiscard]] std::vector<float> compute_bi_persistences(
-    LeafTreeView const leaf_tree, CondensedTreeView const condensed_tree
+    LeafTreeView const leaf_tree, CondensedTreeView const condensed_tree,
+    size_t const num_points
 ) {
   // Working variables.
   size_t const num_rows = condensed_tree.size();
-  size_t const num_points = condensed_tree.parent[0];
   size_t const num_leaves = leaf_tree.size();
   std::vector collected(num_leaves, 0.0f);
   std::vector bi_persistences(num_leaves, 0.0f);
@@ -89,7 +89,8 @@ void fill_persistences(
     // aggregate point distance-persistence
     float const distance = condensed_tree.distance[idx];
     uint64_t parent_idx = condensed_tree.parent[idx] - num_points;
-    while (parent_idx > 0) {
+    // skip roots (i.e. direct children of the phantom root)
+    while (leaf_tree.parent[parent_idx] > 0) {
       collected[parent_idx] += condensed_tree.child_size[idx];
       // use greater equals here to match the min_size trace values that use
       // birth in (birth, death] intervals!
@@ -97,7 +98,7 @@ void fill_persistences(
           collected[parent_idx] < leaf_tree.max_size[parent_idx])
         bi_persistences[parent_idx] += leaf_tree.max_distance[parent_idx] -
                                        distance;
-      parent_idx = leaf_tree.parent[parent_idx] - num_points;
+      parent_idx = leaf_tree.parent[parent_idx];
     }
   }
 
@@ -112,7 +113,9 @@ size_t fill_size_persistence(
   fill_persistences(
       result, leaf_tree, trace_size,
       [leaf_tree](size_t const idx) {
-        return leaf_tree.max_size[idx] - leaf_tree.min_size[idx];
+        // skip roots (i.e. direct children of the phantom root)
+        return static_cast<float>(leaf_tree.parent[idx] > 0u) *
+               (leaf_tree.max_size[idx] - leaf_tree.min_size[idx]);
       }
   );
   return trace_size;
@@ -120,12 +123,12 @@ size_t fill_size_persistence(
 
 size_t fill_bi_persistence(
     PersistenceTraceView result, LeafTreeView const leaf_tree,
-    CondensedTreeView const condensed_tree
+    CondensedTreeView const condensed_tree, size_t const num_points
 ) {
   nb::gil_scoped_release guard{};
   size_t const trace_size = initialize_trace(result, leaf_tree);
   std::vector<float> bi_persistences = compute_bi_persistences(
-      leaf_tree, condensed_tree
+      leaf_tree, condensed_tree, num_points
   );
   fill_persistences(
       result, leaf_tree, trace_size,
@@ -135,19 +138,20 @@ size_t fill_bi_persistence(
 }
 
 PersistenceTrace compute_size_persistence(LeafTree const leaf_tree) {
-  size_t const buffer_size = 2 * leaf_tree.size() - 1u;
+  size_t const buffer_size = 2 * (leaf_tree.size() - 1u);
   auto [trace_view, trace_cap] = PersistenceTrace::allocate(buffer_size);
   size_t const trace_size = fill_size_persistence(trace_view, leaf_tree.view());
   return PersistenceTrace{trace_view, std::move(trace_cap), trace_size};
 }
 
 PersistenceTrace compute_bi_persistence(
-    LeafTree const leaf_tree, CondensedTree const condensed_tree
+    LeafTree const leaf_tree, CondensedTree const condensed_tree,
+    size_t const num_points
 ) {
-  size_t const buffer_size = 2 * leaf_tree.size() - 1u;
+  size_t const buffer_size = 2 * (leaf_tree.size() - 1u);
   auto [trace_view, trace_cap] = PersistenceTrace::allocate(buffer_size);
   size_t trace_size = fill_bi_persistence(
-      trace_view, leaf_tree.view(), condensed_tree.view()
+      trace_view, leaf_tree.view(), condensed_tree.view(), num_points
   );
   return PersistenceTrace{trace_view, std::move(trace_cap), trace_size};
 }
@@ -155,13 +159,13 @@ PersistenceTrace compute_bi_persistence(
 // -- Compute leaf tree icicles
 
 [[nodiscard]] auto collect_traces(
-    LeafTreeView const leaf_tree, CondensedTreeView const condensed_tree
+    LeafTreeView const leaf_tree, CondensedTreeView const condensed_tree,
+    size_t const num_points
 ) {
   nb::gil_scoped_release guard{};
 
   size_t const num_rows = condensed_tree.size();
   size_t const num_leaves = leaf_tree.size();
-  size_t const num_points = condensed_tree.parent[0];
 
   // We use re-sizeable vectors here because we don't know the number of points
   // in each leaf cluster in advance. That would require also tracking the child
@@ -184,7 +188,8 @@ PersistenceTrace compute_bi_persistence(
 
     float const distance = condensed_tree.distance[idx];
     uint64_t parent_idx = condensed_tree.parent[idx] - num_points;
-    while (parent_idx > 0) {
+    // skip the roots (i.e. direct children of the phantom root)
+    while (leaf_tree.parent[parent_idx] > 0) {
       collected[parent_idx] += condensed_tree.child_size[idx];
       // Use greater than (not greater equals) here so the icicles reflect the
       // min_size_threshold rather than birth in (birth, death] intervals!
@@ -195,7 +200,7 @@ PersistenceTrace compute_bi_persistence(
             leaf_tree.max_distance[parent_idx] - distance
         );
       }
-      parent_idx = leaf_tree.parent[parent_idx] - num_points;
+      parent_idx = leaf_tree.parent[parent_idx];
     }
   }
 
@@ -232,10 +237,11 @@ vectors_to_arrays(
 }
 
 auto compute_stability_icicles(
-    LeafTree const leaf_tree, CondensedTree const condensed_tree
+    LeafTree const leaf_tree, CondensedTree const condensed_tree,
+    size_t const num_points
 ) {
   auto [sizes, stabilities] = collect_traces(
-      leaf_tree.view(), condensed_tree.view()
+      leaf_tree.view(), condensed_tree.view(), num_points
   );
   return vectors_to_arrays(std::move(sizes), std::move(stabilities));
 }
@@ -267,9 +273,9 @@ NB_MODULE(_persistence_trace, m) {
 
         Parameters
         ----------
-        min_size : numpy.ndarray[dtype=uint64, shape=(*)]
+        min_size : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             The minimum cluster sizes at which leaf-clusters start to exist.
-        persistence : numpy.ndarray[dtype=float32, shape=(*)]
+        persistence : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The persistence sum for the leaf-clusters that exist at the
             minimum cluster sizes.
       )";
@@ -298,7 +304,7 @@ NB_MODULE(_persistence_trace, m) {
 
   m.def(
       "compute_bi_persistence", &compute_bi_persistence, nb::arg("leaf_tree"),
-      nb::arg("points_tree"),
+      nb::arg("condensed_tree"), nb::arg("num_points"),
       R"(
         Computes a leaf tree from a condensed tree.
 
@@ -308,6 +314,8 @@ NB_MODULE(_persistence_trace, m) {
             The input leaf tree.
         condensed_tree : plscan._condensed_tree.CondensedTree
             The input condensed tree.
+        num_points : int
+            The number of points in the condensed tree.
 
         Returns
         -------
@@ -322,7 +330,7 @@ NB_MODULE(_persistence_trace, m) {
 
   m.def(
       "compute_stability_icicles", &compute_stability_icicles,
-      nb::arg("leaf_tree"), nb::arg("points_tree"),
+      nb::arg("leaf_tree"), nb::arg("condensed_tree"), nb::arg("num_points"),
       R"(
         Computes the icicle size--stability trace for the LeafTree plot.
 
@@ -332,12 +340,13 @@ NB_MODULE(_persistence_trace, m) {
             The input leaf tree.
         condensed_tree : plscan._condensed_tree.CondensedTree
             The input condensed tree.
-
+        num_points : int
+            The number of points in the condensed tree.
         Returns
         -------
-        sizes : list[numpy.ndarray[dtype=float32, shape=(*)]]
+        sizes : list[numpy.ndarray[tuple[int], np.dtype[np.float32]]]
             The icicle min cluster sizes (births in (birth, death])).
-        stabilities : list[numpy.ndarray[dtype=float32, shape=(*)]]
+        stabilities : list[numpy.ndarray[tuple[int], np.dtype[np.float32]]]
             The icicle stabilities.
       )"
   );

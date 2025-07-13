@@ -13,12 +13,28 @@ from . import plots
 class PLSCAN(ClusterMixin, BaseEstimator):
     """
     PLSCAN computes HDBSCAN* [1]_ leaf-clusters with an optimal minimum cluster
-    size. The minimum cluster size that maximizes the resulting clusters' total
-    (bi-)persistence is selected. Cluster segmentations for other
-    high-persistence minimum cluster sizes are available as cluster layers,
-    allowing for manual selection of the best clustering. The leaf-cluster
-    hierarchy that computed in a minimum cluster size filtration can be plotted
-    as an alternative to HDBSCAN*'s condensed cluster tree.
+    size. The algorithm builds a hierarchy of leaf-clusters, showing which
+    clusters are leaves as the minimum cluster size varies (filtration). Then,
+    it computes the total leaf-cluster persistence per minimum cluster size, and
+    picks the minimum cluster size that maximizes that score.
+
+    If the input contains mutual reachability distances, the `min_cluster_size`
+    should be set to the number of neighbors used to compute those mutual
+    reachability distances. The `max_cluster_size` parameter can be used as
+    additional constraint if desired.
+
+    The leaf-cluster hierarch in `leaf_tree_` can be plotted as an alternative
+    to HDBSCAN*'s condensed cluster tree.
+
+    Cluster segmentations for other high-persistence minimum cluster sizes can
+    be computed using the `cluster_layers` method. This method finds the
+    persistence peaks and returns their cluster labels and memberships.
+
+    The input should be a (partial) minimum spanning tree. If it contains
+    multiple connected components, the optimal minimum cluster size is selected
+    to maximize the total persistence of over all components. The algorithm
+    always selects multiple clusters per connected component. In other words,
+    the connected component(s) themselves are never selected as cluster(s).
 
     Parameters
     ----------
@@ -94,7 +110,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
     def fit(
         self,
         X: np.ndarray[tuple[int, int], np.dtype[np.float64]],
-        y: None = None,
+        num_points: int,
         *,
         sample_weights: np.ndarray[tuple[int], np.dtype[np.float32]] | None = None,
         **fit_params,
@@ -105,11 +121,14 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         Parameters
         ----------
         X : np.ndarray[tuple[int, int], np.dtype[np.float64]]
-            The input minimum spanning tree, where the first column represents
-            the edge parents, the second column represents the edge children,
-            and the third column represents edge distances
-        y : None, optional
-            Unused, for compatibility with scikit-learn.
+            A sorted (partial) minimum spanning tree (MST), where the first
+            column represents the edge parents, the second column represents the
+            edge children, and the third column represents edge distances. The
+            MST may contain multiple connected components, but it must be a
+            tree/forest!
+        num_points : int, optional
+            The number of points in the input data. TODO: use a sparse input on
+            X!
         sample_weights : np.ndarray[tuple[int], np.dtype[np.float32]], optional
             Sample weights for the points in the sorted minimum spanning tree.
             If None, all samples are considered equally weighted. Default is
@@ -139,6 +158,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                 sample_weights, X, dtype=np.float32, ensure_non_negative=True
             )
 
+        self._num_points = num_points
         self._minimum_spanning_tree = api.SpanningTree(
             X[:, 0].astype(np.uint64),
             X[:, 1].astype(np.uint64),
@@ -153,6 +173,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self._linkage_tree,
         ) = api.clusters_from_spanning_tree(
             self._minimum_spanning_tree,
+            num_points,
             sample_weights=sample_weights,
             **self.get_params(),
         )
@@ -171,13 +192,17 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self._condensed_tree,
             self.selected_clusters_,
             self._persistence_trace,
+            self._num_points,
         )
 
     @property
     def condensed_tree_(self):
         check_is_fitted(self, ("labels_"))
         return plots.CondensedTree(
-            self._leaf_tree, self._condensed_tree, self.selected_clusters_
+            self._leaf_tree,
+            self._condensed_tree,
+            self.selected_clusters_,
+            self._num_points,
         )
 
     @property
@@ -275,23 +300,19 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             The membership probabilities for each point in the input data.
         """
         check_is_fitted(self, "labels_")
-        selected_clusters = np.flatnonzero(
-            (self._leaf_tree.min_distance <= epsilon)
-            & (self._leaf_tree.max_distance > epsilon)
-        )
+        selected_clusters = api.apply_distance_cut(self._leaf_tree, epsilon)
         return api.compute_cluster_labels(
             self._leaf_tree, self._condensed_tree, selected_clusters
         )
 
-    def min_cluster_size_cut(self, birth_size: float):
+    def min_cluster_size_cut(self, cut_size: float):
         """
-        Computes cluster labels and membership probabilities at the given birth
-        size threshold (birth_size) in a left-open (birth, death] size
-        interval.
+        Computes cluster labels and membership probabilities at the given cut
+        size threshold (cut_size) in a left-open (birth, death] size interval.
 
         Parameters
         ----------
-        birth_size : float
+        cut_size : float
             The birth size threshold for the cluster labels and membership
             probabilities.
 
@@ -303,10 +324,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             The membership probabilities for each point in the input data.
         """
         check_is_fitted(self, "labels_")
-        selected_clusters = np.flatnonzero(
-            (self._leaf_tree.min_size <= birth_size)
-            & (self._leaf_tree.max_size > birth_size)
-        )
+        selected_clusters = api.apply_size_cut(self._leaf_tree, cut_size)
         return api.compute_cluster_labels(
-            self._leaf_tree, self._condensed_tree, selected_clusters
+            self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
         )

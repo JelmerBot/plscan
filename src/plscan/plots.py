@@ -13,8 +13,10 @@ from . import api
 
 class CondensedTree(object):
     """
-    A tree describing which clusters exist and how they split along descending
-    distances.
+    A tree/forest describing which clusters exist and how they split along
+    descending distances. Unlike in HDBSCAN*, this version can represent a
+    forest, rather than a single tree. See the documentation on the `to_*`
+    conversion methods for details on the output formats!
 
     Parameters
     ----------
@@ -24,6 +26,8 @@ class CondensedTree(object):
         The condensed tree namedtuple as produced internally.
     selected_clusters : np.ndarray[tuple[int,...], np.dtype[np.int64]]
         The condensed tree parent IDS for the selected clusters.
+    num_points : int
+        The number of points in the condensed tree.
     """
 
     def __init__(
@@ -31,13 +35,28 @@ class CondensedTree(object):
         leaf_tree: api.LeafTree,
         condensed_tree: api.CondensedTree,
         selected_clusters: np.ndarray[tuple[int, ...], np.dtype[np.int64]],
+        num_points: int,
     ):
         self._leaf_tree = leaf_tree
         self._tree = condensed_tree
         self._chosen_segments = {c: i for i, c in enumerate(selected_clusters)}
+        self._num_points = num_points
 
     def to_numpy(self):
-        """Returns a numpy structured array representation of the condensed tree."""
+        """Returns a numpy structured array of the condensed tree.
+
+        The columns are: parent, child, distance, child_size. The parent
+        labelling starts at `num_points`, which represents a phantom root. All
+        points connecting directly to the (multiple) tree roots have
+        `num_points` as their parent. The labels for the tree roots themselves
+        occur only as a parent and start from `num_points + 1`.
+
+        Due to this construction, we cannot recover which points belong to which
+        tree root (if there are multiple trees). In addition, the first parent
+        value cannot be used to find `num_points`, as it can be the first
+        tree-root value `num_points + 1`! All parents that do not occur as
+        children should be considered a child of the phantom root.
+        """
         dtype = [
             ("parent", np.uint64),
             ("child", np.uint64),
@@ -52,7 +71,21 @@ class CondensedTree(object):
         return result
 
     def to_pandas(self):
-        """Returns a pandas dataframe representation of the condensed tree."""
+        """
+        Returns a pandas dataframe of the condensed tree.
+
+        The columns are: parent, child, distance, child_size. The parent
+        labelling starts at `num_points`, which represents a phantom root. All
+        points connecting directly to the (multiple) tree roots have
+        `num_points` as their parent. The labels for the tree roots themselves
+        occur only as a parent and start from `num_points + 1`.
+
+        Due to this construction, we cannot recover which points belong to which
+        tree root (if there are multiple trees). In addition, the first parent
+        value cannot be used to find `num_points`, as it can be the first
+        tree-root value `num_points + 1`! All parents that do not occur as
+        children should be considered a child of the phantom root.
+        """
         try:
             from pandas import DataFrame
         except ImportError:
@@ -61,10 +94,12 @@ class CondensedTree(object):
             )
 
         return DataFrame(
-            parent=self._tree.parent,
-            child=self._tree.child,
-            distance=self._tree.distance,
-            child_size=self._tree.child_size,
+            dict(
+                parent=self._tree.parent,
+                child=self._tree.child,
+                distance=self._tree.distance,
+                child_size=self._tree.child_size,
+            )
         )
 
     def to_networkx(self):
@@ -76,6 +111,10 @@ class CondensedTree(object):
         Nodes have a `size` attribute attached giving the number of (weighted)
         points that are in the cluster at the point of cluster creation (fewer
         points may be in the cluster at larger distance values).
+
+        Edges connecting tree roots to the phantom root have no `distance`
+        attribute, because that distance is not known. If there is a single tree
+        root, the phantom root's maximum distance can be used instead.
         """
         try:
             import networkx as nx
@@ -99,12 +138,15 @@ class CondensedTree(object):
             },
             "size",
         )
+        for leaf_idx, parent in enumerate(self._leaf_tree.parent):
+            if parent == 0:
+                g.add_edge((self._num_points, leaf_idx + self._num_points))
         return g
 
     def plot(
         self,
         *,
-        leaf_separation: float = 0.1,
+        leaf_separation: float = 0.3,
         cmap: str | Colormap = "viridis",
         colorbar: bool = True,
         log_size: bool = False,
@@ -112,6 +154,7 @@ class CondensedTree(object):
         label_clusters: bool = False,
         select_clusters: bool = False,
         selection_palette: str | Colormap = "tab10",
+        continuation_line_kws: dict | None = None,
         connect_line_kws: dict | None = None,
         colorbar_kws: dict | None = None,
         label_kws: dict | None = None,
@@ -140,6 +183,9 @@ class CondensedTree(object):
             with ellipses. Defaults to False.
         selection_palette : list, optional
             A list of colors to highlight selected clusters. Defaults to "tab10".
+        continuation_line_kws : dict, optional
+            Additional keyword arguments for the continuation lines indicating
+            the continuation of root clusters.
         connect_line_kws : dict, optional
             Additional keyword arguments for the connecting lines between
             segments.
@@ -154,26 +200,25 @@ class CondensedTree(object):
             distances = rankdata(self._tree.distance, method="dense")
 
         # Prepare trees
-        max_size = self._tree.parent[0]
+        max_size = self._leaf_tree.min_size[0]
         cluster_tree = api.CondensedTree(
             self._tree.parent[self._tree.cluster_rows],
             self._tree.child[self._tree.cluster_rows],
-            distances[self._tree.cluster_rows],
+            distances[self._tree.cluster_rows].astype(
+                np.float32, order="C", copy=False
+            ),
             self._tree.child_size[self._tree.cluster_rows],
             np.array([], dtype=np.uint64),
         )
 
         # List segment info
-        x_coords = self._x_coords(cluster_tree) * leaf_separation
-        parents = self._leaf_tree.parent - self._leaf_tree.parent[0]
+        parents = self._leaf_tree.parent
+        x_coords = self._x_coords(parents) * leaf_separation
         if not distance_ranks:
             death_dist = self._leaf_tree.max_distance
         else:
-            death_dist = np.empty(parents.shape, dtype=np.float32)
-            death_dist[cluster_tree.child - self._tree.parent[0]] = (
-                cluster_tree.distance
-            )
-            death_dist[0] = distances[0]
+            death_dist = np.full(parents.shape, distances[0], dtype=np.float32)
+            death_dist[cluster_tree.child - self._num_points] = cluster_tree.distance
 
         order = np.argsort(self._tree.parent, kind="stable")
         if log_size:
@@ -200,75 +245,93 @@ class CondensedTree(object):
                 ellipse_colors = plt.get_cmap(selection_palette).colors
 
         # Process each segment
-        segments = []
+        bar = None
         ellipses = []
+        connecting_lines = []
+        continuation_lines = []
         for segment_idx, (trace, parent_idx, segment_dist) in enumerate(
-            zip(traces, parents, death_dist)
+            zip(traces[1:], parents[1:], death_dist[1:]), 1
         ):
-            # extract distance--size traces and correct for the death distance
-            size_trace = np.empty(trace.shape[1] + 1, dtype=np.float32)
-            dist_trace = np.empty(trace.shape[1] + 1, dtype=np.float32)
-
-            size_trace[:-1] = np.cumsum(trace[1, :][::-1])
-            size_trace[-1] = size_trace[-2]
-            dist_trace[:-1] = trace[0, :][::-1]
-            dist_trace[-1] = segment_dist
-
-            select = np.flatnonzero(np.diff(dist_trace, append=-1))
-            dist_trace = dist_trace[select]
-            size_trace = size_trace[select]
-
-            # schedule the horizontal line segment
-            if segment_idx > 0:
-                offset = size_trace[-1] / max_size * 0.5
-                segment_x = x_coords[segment_idx]
-                if segment_x > x_coords[parent_idx]:
-                    segment_x += offset
+            dist_trace, size_trace = self._prepare_trace(trace, segment_dist)
+            if parent_idx == 0:
+                if x_coords[0] == x_coords[segment_idx]:
+                    # there is one root, plot its icicle.
+                    root_dist_trace, root_size_trace = self._prepare_trace(
+                        traces[0], death_dist[0]
+                    )
+                    bar = self._plot_icicle(
+                        x_coords[segment_idx],
+                        root_dist_trace,
+                        root_size_trace + size_trace[0],
+                        max_size,
+                        plt.get_cmap(cmap),
+                    )
                 else:
-                    segment_x -= offset
-                segments.append(
+                    # there are multiple roots, plot a continuation lines
+                    continuation_lines.append(
+                        [
+                            (x_coords[segment_idx], dist_trace[0]),
+                            (x_coords[segment_idx], segment_dist),
+                        ]
+                    )
+            else:
+                # horizontal connecting line to parent
+                segment_x = x_coords[segment_idx]
+                if size_trace.shape[0] > 0:
+                    offset = size_trace[-1] / max_size * 0.5
+                    if segment_x > x_coords[parent_idx]:
+                        segment_x += offset
+                    else:
+                        segment_x -= offset
+                connecting_lines.append(
                     [(segment_x, segment_dist), (x_coords[parent_idx], segment_dist)]
                 )
 
-            # plot the icicle
-            xs = np.array([[x_coords[segment_idx]], [x_coords[segment_idx]]])
-            widths = xs + size_trace / max_size * np.array([[-0.5], [0.5]])
-            bar = plt.pcolormesh(
-                widths,
-                np.broadcast_to(dist_trace, (2, dist_trace.shape[0])),
-                np.broadcast_to(size_trace, (2, dist_trace.shape[0])),
-                edgecolors="none",
-                linewidth=0,
-                vmin=0,
-                vmax=max_size,
-                cmap=cmap,
-                shading="gouraud",
-            )
+                # plot the icicle
+                if size_trace.shape[0] > 0:
+                    bar = self._plot_icicle(
+                        x_coords[segment_idx],
+                        dist_trace,
+                        size_trace,
+                        max_size,
+                        plt.get_cmap(cmap),
+                    )
 
-            # Add Ellipse for selected segments
-            if (
-                label_clusters or select_clusters
-            ) and segment_idx in self._chosen_segments:
-                center = (x_coords[segment_idx], 0.5 * (dist_trace[-1] + dist_trace[0]))
-                width = size_trace[-1] / max_size
-                height = dist_trace[-1] - dist_trace[0]
-                ellipse = Ellipse(center, leaf_separation + width, 1.4 * height)
-                if label_clusters:
-                    if segment_idx in self._chosen_segments:
-                        plt.text(
-                            x_coords[segment_idx],
-                            ellipse.get_corners()[0][1],
-                            len(ellipses),
-                            **_label_kws,
-                        )
-                if select_clusters:
-                    ellipses.append(ellipse)
+                # Add Ellipse for selected segments
+                if (
+                    label_clusters or select_clusters
+                ) and segment_idx in self._chosen_segments:
+                    max_dist = self._leaf_tree.max_distance[segment_idx]
+                    min_dist = self._leaf_tree.min_distance[segment_idx]
+                    size = self._leaf_tree.max_size[segment_idx]
+                    width = size / max_size
+                    height = max_dist - min_dist
+                    center = (x_coords[segment_idx], (min_dist + max_dist) / 2)
+                    ellipse = Ellipse(center, leaf_separation + width, 1.4 * height)
+                    if label_clusters:
+                        if segment_idx in self._chosen_segments:
+                            plt.text(
+                                x_coords[segment_idx],
+                                ellipse.get_corners()[0][1],
+                                len(ellipses),
+                                **_label_kws,
+                            )
+                    if select_clusters:
+                        ellipses.append(ellipse)
 
         # Plot the lines and ellipses
         _connect_line_kws = dict(linestyle="-", color="black", linewidth=0.5)
         if connect_line_kws is not None:
             _connect_line_kws.update(connect_line_kws)
-        plt.gca().add_collection(LineCollection(segments, **_connect_line_kws))
+        plt.gca().add_collection(LineCollection(connecting_lines, **_connect_line_kws))
+
+        _continuation_line_kws = dict(linestyle=":", color="black", linewidth=1)
+        if continuation_line_kws is not None:
+            _continuation_line_kws.update(continuation_line_kws)
+        plt.gca().add_collection(
+            LineCollection(continuation_lines, **_continuation_line_kws)
+        )
+
         if select_clusters:
             plt.gca().add_collection(
                 PatchCollection(
@@ -283,7 +346,7 @@ class CondensedTree(object):
             )
 
         # Plot the colorbar
-        if colorbar:
+        if colorbar and bar is not None:
             if colorbar_kws is None:
                 colorbar_kws = dict()
 
@@ -306,48 +369,60 @@ class CondensedTree(object):
         plt.xticks([])
         xlim = plt.xlim()
         plt.xlim([xlim[0] - 0.05 * xlim[1], 1.05 * xlim[1]])
+        plt.ylim(0, death_dist[0])
         plt.ylabel("Distance" if not distance_ranks else "Distance rank")
 
     @classmethod
-    def _x_coords(cls, cluster_tree: api.CondensedTree):
-        """Get the x-coordinates of the segments in the condensed tree."""
-        num_points = cluster_tree.parent[0]
-        children = dict()
-        for parent, child in zip(cluster_tree.parent, cluster_tree.child):
-            parent_idx = parent - num_points
-            if parent_idx not in children:
-                children[parent_idx] = []
-            children[parent_idx].append(child - num_points)
-
-        x_coords = np.empty(cluster_tree.parent.shape[0] + 1)
-        cls._df_leaf_order(x_coords, children, 0, 0)
-        return x_coords
+    def _plot_icicle(cls, x, dist_trace, size_trace, max_size, cmap):
+        xs = np.array([[x], [x]])
+        widths = xs + size_trace / max_size * np.array([[-0.5], [0.5]])
+        return plt.pcolormesh(
+            widths,
+            np.broadcast_to(dist_trace, (2, dist_trace.shape[0])),
+            np.broadcast_to(size_trace, (2, dist_trace.shape[0])),
+            edgecolors="none",
+            linewidth=0,
+            vmin=0,
+            vmax=max_size,
+            cmap=cmap,
+            shading="gouraud",
+        )
 
     @classmethod
-    def _df_leaf_order(
-        cls,
-        x_coords: np.ndarray[tuple[int], np.dtype[np.float64]],
-        children: dict[int, list[int]],
-        idx: int,
-        count: int,
-    ) -> tuple[list[tuple[int, float]], float, int]:
-        """Depth-first (in-order) traversal to order the leaf clusters."""
-        if idx not in children:
-            x_coords[idx] = float(count)
-            return count, count + 1
+    def _prepare_trace(cls, trace, segment_dist):
+        # extract distance--size traces and correct for the death distance
+        size_trace = np.empty(trace.shape[1] + 1, dtype=np.float32)
+        dist_trace = np.empty(trace.shape[1] + 1, dtype=np.float32)
 
-        segments = children[idx]
-        lx, count = cls._df_leaf_order(x_coords, children, segments[0], count)
-        rx, count = cls._df_leaf_order(x_coords, children, segments[1], count)
-        mid = (lx + rx) / 2
-        x_coords[idx] = mid
-        return mid, count
+        size_trace[:-1] = np.cumsum(trace[1, :][::-1])
+        size_trace[-1] = size_trace[-2]
+        dist_trace[:-1] = trace[0, :][::-1]
+        dist_trace[-1] = segment_dist
+
+        select = np.flatnonzero(np.diff(dist_trace, append=-1))
+        dist_trace = dist_trace[select]
+        size_trace = size_trace[select]
+        return dist_trace, size_trace
+
+    @classmethod
+    def _x_coords(self, parents: np.ndarray[tuple[int], np.dtype[np.uint64]]):
+        """Get the x-coordinates of the segments in the condensed tree."""
+        children = dict()
+        for child_idx, parent_idx in enumerate(parents[1:], 1):
+            if parent_idx not in children:
+                children[parent_idx] = []
+            children[parent_idx].append(child_idx)
+
+        x_coords = np.empty(parents.shape[0])
+        LeafTree._df_leaf_order(x_coords, children, 0, 0)
+        return x_coords
 
 
 class LeafTree(object):
     """
     A tree describing which clusters exist and how they split along increasing
-    minimum cluster size thresholds.
+    minimum cluster size thresholds. See the documentation for the `to_*`
+    conversion methods for details on the output formats!
 
     Parameters
     ----------
@@ -359,6 +434,8 @@ class LeafTree(object):
         The leaf tree parent IDS for the selected clusters.
     persistence_trace : plscan.api.PersistenceTrace
         The persistence trace for the leaf tree.
+    num_points : int
+        The number of points in the leaf tree.
     """
 
     def __init__(
@@ -367,18 +444,31 @@ class LeafTree(object):
         condensed_tree: api.CondensedTree,
         selected_clusters: np.ndarray[tuple[int, ...], np.dtype[np.int64]],
         persistence_trace: api.PersistenceTrace,
+        num_points: int,
     ):
         self._tree = leaf_tree
         self._condensed_tree = condensed_tree
         self._chosen_segments = {c: i for i, c in enumerate(selected_clusters)}
         self._persistence_trace = persistence_trace
+        self._num_points = num_points
 
     def to_numpy(self):
-        """Returns a numpy structured array representation of the leaf tree.
+        """Returns a numpy structured array of the leaf tree.
+
+        Each row represents a segment in the condensed tree, with the first row
+        representing the phantom root.
+
+        The `parent` column indicates the parent cluster ID for each segment.
+        These IDs start from 0 and are row-indices into the leaf tree. The
+        phantom root has itself as a parent to indicate that it is the root of
+        the tree.
+
+        The `min_distance` and `max_distance` columns form a right-open [birth,
+        death) interval, indicating at which distance thresholds clusters exist.
 
         The `min_size` and `max_size` columns form a left-open (birth, death]
         interval, indicating at which min cluster size thresholds clusters are
-        leaves.
+        leaves. If `max_size` <= `min_size`, the cluster is not a leaf.
         """
         dtype = [
             ("parent", np.uint64),
@@ -395,11 +485,22 @@ class LeafTree(object):
         return result
 
     def to_pandas(self):
-        """Return a pandas dataframe representation of the leaf tree.
+        """Return a pandas dataframe of the leaf tree.
+
+        Each row represents a segment in the condensed tree, with the first row
+        representing the phantom root.
+
+        The `parent` column indicates the parent cluster ID for each segment.
+        These IDs start from 0 and are row-indices into the leaf tree. The
+        phantom root has itself as a parent to indicate that it is the root of
+        the tree.
+
+        The `min_distance` and `max_distance` columns form a right-open [birth,
+        death) interval, indicating at which distance thresholds clusters exist.
 
         The `min_size` and `max_size` columns form a left-open (birth, death]
         interval, indicating at which min cluster size thresholds clusters are
-        leaves.
+        leaves. If `max_size` <= `min_size`, the cluster is not a leaf.
         """
         try:
             from pandas import DataFrame
@@ -409,26 +510,31 @@ class LeafTree(object):
             )
 
         return DataFrame(
-            parent=self._tree.parent,
-            min_distance=self._tree.min_distance,
-            max_distance=self._tree.max_distance,
-            min_size=self._tree.min_size,
-            max_size=self._tree.max_size,
+            dict(
+                parent=self._tree.parent,
+                min_distance=self._tree.min_distance,
+                max_distance=self._tree.max_distance,
+                min_size=self._tree.min_size,
+                max_size=self._tree.max_size,
+            )
         )
 
     def to_networkx(self):
         """Return a NetworkX DiGraph object representing the leaf tree.
 
-        Edges have a `size` attribute giving the cluster size threshold at which
-        the child node becomes a leaf. The value matches the child's death size
-        threshold in a left-open (birth, death] size interval.
+        Edges have a `size` and `distance` attribute giving the cluster size
+        threshold and distance at which the child connects to the parent. The
+        `child` and `parent` values start from 0 and are row-indices into the
+        leaf tree. The phantom root has itself as a parent to indicate that it
+        is the root of the tree.
 
         Nodes have `min_size`, `max_size`, `min_distance`, `max_distance`
-        attributes attached giving the minimum cluster size, maximum cluster
-        size, and maximum distance at which the cluster is a leaf, respectively.
-        The `min_size` and `max_size` columns form a left-open (birth, death]
-        interval, indicating at which min cluster size thresholds clusters are
-        leaves.
+        attributes. The `min_distance` and `max_distance` columns form a
+        right-open [birth, death) interval, indicating at which distance
+        thresholds clusters exist. The `min_size` and `max_size` columns form a
+        left-open (birth, death] interval, indicating at which min cluster size
+        thresholds clusters are leaves. If `max_size` <= `min_size`, the cluster
+        is not a leaf.
         """
         try:
             import networkx as nx
@@ -437,16 +543,22 @@ class LeafTree(object):
                 "You must have networkx installed to export networkx graphs"
             )
 
-        edges = {
-            (i + self._tree.parent[0], pt): size
-            for i, (pt, size) in enumerate(zip(self._tree.parent, self._tree.max_size))
-        }
-        g = nx.DiGraph(edges.keys())
-        nx.set_edge_attributes(g, edges, "size")
+        g = nx.DiGraph(
+            {(i + self._num_points, pt) for i, pt in enumerate(self._tree.parent)}
+        )
+        nx.set_edge_attributes(
+            g,
+            {
+                (i + self._num_points, pt): dict(size=size, distance=dist)
+                for i, (pt, size, dist) in enumerate(
+                    zip(self._tree.parent, self._tree.max_size, self._tree.max_distance)
+                )
+            },
+        )
         nx.set_node_attributes(
             g,
             {
-                (i + self._tree.parent[0]): dict(
+                (i + self._num_points): dict(
                     min_size=min_size,
                     max_size=max_size,
                     min_distance=min_dist,
@@ -510,10 +622,9 @@ class LeafTree(object):
         """
 
         # Compute the layout
-        num_points = self._tree.parent[0]
         parents = np.empty_like(self._tree.parent)
         for idx, parent_idx in enumerate(self._tree.parent):
-            parents[idx] = self._leaf_parent(parent_idx - num_points)
+            parents[idx] = self._leaf_parent(parent_idx)
         x_coords = self._x_coords(parents) * leaf_separation
 
         # Prepare the labels
@@ -549,63 +660,60 @@ class LeafTree(object):
         min_size_traces, width_traces = self._compute_icicle_traces()
         max_width = max(trace[0] for trace in width_traces if trace.size > 0)
 
+        bar = None
         for leaf_idx, (parent_idx, size_trace, width_trace) in enumerate(
-            zip(parents, min_size_traces, width_traces)
+            zip(parents[1:], min_size_traces[1:], width_traces[1:]), 1
         ):
-            if size_trace.size == 0 or leaf_idx == 0:
+            # skip segments that are not leaves
+            if self._tree.max_size[leaf_idx] <= self._tree.min_size[leaf_idx]:
                 continue
+
+            # draw lines connecting the leaf cluster to its parent
             x = x_coords[leaf_idx]
-
-            # icicle xs
-            xs = np.asarray([[x], [x]])
-            widths = xs + width_trace / max_width * np.array([[-0.5], [0.5]])
-
-            # icicle colors
-            j = 0
-            measure = np.empty_like(size_trace)
-            measure_ranks = rankdata(-self._persistence_trace.persistence, method="min")
-            for i, size in enumerate(self._persistence_trace.min_size):
-                while j < len(size_trace) and size_trace[j] < size:
-                    measure[j] = measure_ranks[i - 1]
-                    j += 1
-
-            bar = plt.pcolormesh(
-                widths,
-                np.broadcast_to(size_trace, (2, len(size_trace))),
-                np.broadcast_to(measure, (2, len(size_trace))),
-                edgecolors="none",
-                linewidth=0,
-                cmap=cmap,
-                norm=cmap_norm,
-                shading="gouraud",
+            y_start = (
+                self._tree.max_size[leaf_idx]
+                if parent_idx > 0
+                else self._tree.min_size[leaf_idx]
             )
-
-            # Add the horizontal and vertical lines
             parent_lines.append(
                 [
-                    (x, self._tree.max_size[leaf_idx]),
+                    (x, y_start),
                     (x, self._tree.min_size[parent_idx]),
                 ]
             )
-            offset = width_trace[-1] / max_width * 0.5
-            if x > x_coords[parent_idx]:
-                offset_x = x + offset
-            else:
-                offset_x = x - offset
+
+            # don't draw anything else for root clusters
+            if parent_idx == 0:
+                continue
+
+            # draw horizontal connecting line to parent
+            segment_x = x
+            if size_trace.size > 0:
+                offset = width_trace[-1] / max_width * 0.5
+                if x > x_coords[parent_idx]:
+                    segment_x = x + offset
+                else:
+                    segment_x = x - offset
             connect_lines.append(
                 [
-                    (offset_x, self._tree.min_size[parent_idx]),
+                    (segment_x, self._tree.min_size[parent_idx]),
                     (x_coords[parent_idx], self._tree.min_size[parent_idx]),
                 ]
             )
 
-            # Add Ellipse for selected segments
+            # add Ellipse for selected segments
             if (
                 label_clusters or select_clusters
             ) and leaf_idx in self._chosen_segments:
-                center = (x_coords[leaf_idx], 0.5 * (size_trace[-1] + size_trace[0]))
-                height = size_trace[-1] - size_trace[0]
-                width = width_trace[0] / max_width
+                max_size = self._tree.max_size[leaf_idx]
+                if size_trace.shape[0] == 0:
+                    min_size = self._tree.max_size[leaf_idx]
+                else:
+                    min_size = size_trace[0]
+                center = (x_coords[leaf_idx], (max_size + min_size) / 2)
+                height = max_size - min_size
+                width = width_trace[0] if width_trace.size > 0 else 0
+                width /= max_width
                 ellipse = Ellipse(center, leaf_separation + width, 1.2 * height)
                 if label_clusters:
                     if leaf_idx in self._chosen_segments:
@@ -617,6 +725,32 @@ class LeafTree(object):
                         )
                 if select_clusters:
                     ellipses.append(ellipse)
+
+            # draw the icicle segment
+            if size_trace.size > 0:
+                xs = np.asarray([[x], [x]])
+                widths = xs + width_trace / max_width * np.array([[-0.5], [0.5]])
+
+                j = 0
+                measure = np.empty_like(size_trace)
+                measure_ranks = rankdata(
+                    -self._persistence_trace.persistence, method="min"
+                )
+                for i, size in enumerate(self._persistence_trace.min_size):
+                    while j < len(size_trace) and size_trace[j] < size:
+                        measure[j] = measure_ranks[i - 1]
+                        j += 1
+
+                bar = plt.pcolormesh(
+                    widths,
+                    np.broadcast_to(size_trace, (2, len(size_trace))),
+                    np.broadcast_to(measure, (2, len(size_trace))),
+                    edgecolors="none",
+                    linewidth=0,
+                    cmap=cmap,
+                    norm=cmap_norm,
+                    shading="gouraud",
+                )
 
         plt.gca().add_collection(LineCollection(parent_lines, **_parent_line_kws))
         plt.gca().add_collection(LineCollection(connect_lines, **_connect_line_kws))
@@ -634,7 +768,7 @@ class LeafTree(object):
             )
 
         # Plot the colorbar
-        if colorbar:
+        if colorbar and bar is not None:
             if colorbar_kws is None:
                 colorbar_kws = dict()
 
@@ -650,21 +784,27 @@ class LeafTree(object):
         for side in ("right", "top", "bottom"):
             plt.gca().spines[side].set_visible(False)
 
-        plt.xticks([])
-        xlim = plt.xlim()
+        # plt.xticks([])
+        xlim = plt.xlim(x_coords.min(), x_coords.max())
         plt.xlim([xlim[0] - 0.05 * xlim[1], 1.05 * xlim[1]])
+        plt.ylim(0, self._tree.min_size[0])
         plt.ylabel("Minimum cluster size")
+        return x_coords
 
     def _leaf_parent(self, parent_idx: int):
         """Get the leaf-cluster parent of a leaf cluster."""
-        num_points = self._tree.parent[0]
-        while self._tree.max_size[parent_idx] < self._tree.min_size[parent_idx]:
-            parent_idx = self._tree.parent[parent_idx] - num_points
+        while (
+            self._tree.parent[parent_idx] > 0
+            and self._tree.max_size[parent_idx] <= self._tree.min_size[parent_idx]
+        ):
+            parent_idx = self._tree.parent[parent_idx]
         return parent_idx
 
     def _compute_icicle_traces(self):
         # Lists the size--distance-persistence trace for each cluster
-        sizes, traces = api.compute_stability_icicles(self._tree, self._condensed_tree)
+        sizes, traces = api.compute_stability_icicles(
+            self._tree, self._condensed_tree, self._num_points
+        )
 
         # Compute stability and truncate to min_cluster_size lifetime
         upper_idx = [
@@ -681,15 +821,15 @@ class LeafTree(object):
     def _x_coords(self, parents: np.ndarray[tuple[int], np.dtype[np.uint64]]):
         """Get the x-coordinates of the segments in the condensed tree."""
         children = dict()
-        num_points = parents[0]
-        for child_idx, parent in enumerate(parents[1:], 1):
-            parent_idx = parent - num_points
-            if self._tree.max_size[child_idx] <= self._tree.min_size[child_idx]:
+        for child_idx, parent_idx in enumerate(parents[1:], 1):
+            if (
+                parent_idx > 0
+                and self._tree.max_size[child_idx] <= self._tree.min_size[child_idx]
+            ):
                 continue
             if parent_idx not in children:
                 children[parent_idx] = []
             children[parent_idx].append(child_idx)
-
         x_coords = np.empty(parents.shape[0])
         self._df_leaf_order(x_coords, children, 0, 0)
         return x_coords
@@ -765,7 +905,7 @@ class PersistenceTrace(object):
             )
 
         return DataFrame(
-            min_size=self._trace.min_size, persistence=self._trace.persistence
+            dict(min_size=self._trace.min_size, persistence=self._trace.persistence)
         )
 
     def plot(self, linekwargs: dict | None = None):

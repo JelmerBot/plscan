@@ -35,7 +35,7 @@ struct LinkageTree {
   LinkageTree(LinkageTree &&) = default;
   LinkageTree(LinkageTree const &) = default;
 
-  // Python side constructor with stride check.
+  // Python side constructor.
   LinkageTree(
       array_ref<uint64_t> const parent, array_ref<uint64_t> const child,
       array_ref<uint64_t> const child_count, array_ref<float> const child_size

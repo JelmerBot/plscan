@@ -22,13 +22,14 @@ struct Labelling {
   Labelling(Labelling &&) = default;
   Labelling(Labelling const &) = default;
 
-  // Python side constructor with stride check.
+  // Python side constructor.
   Labelling(array_ref<int64_t> const label, array_ref<float> const probability)
       : label(label), probability(probability){};
 
   // C++ side constructor
-  explicit Labelling(size_t const size)
-      : label(new_array<int64_t>(size)), probability(new_array<float>(size)) {}
+  explicit Labelling(size_t const num_points)
+      : label(new_array<int64_t>(num_points)),
+        probability(new_array<float>(num_points)) {}
 
   [[nodiscard]] LabellingView view() const {
     return {to_view(label), to_view(probability)};

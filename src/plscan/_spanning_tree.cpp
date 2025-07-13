@@ -27,11 +27,11 @@ NB_MODULE(_spanning_tree, m) {
 
         Parameters
         ----------
-        parent : numpy.ndarray[dtype=uint64, shape=(*)]
+        parent : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             An array of parent node indices.
-        child : numpy.ndarray[dtype=uint64, shape=(*)]
+        child : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             An array of child node indices.
-        distance : numpy.ndarray[dtype=float32, shape=(*)]
+        distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             An array of distances between the nodes.
       )";
 }

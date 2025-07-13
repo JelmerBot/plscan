@@ -1,6 +1,5 @@
 #include "_linkage_tree.h"
 
-#include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
 
 #include <algorithm>
@@ -16,14 +15,13 @@ class LinkageState {
 
  public:
   LinkageState(
-      size_t const num_edges,
+      size_t const num_points, size_t const num_edges,
       std::optional<array_ref<float>> const sample_weights
   )
-      : parent(2 * num_edges + 1u, 0u),
-        child_count(2 * num_edges + 1u),
-        child_size(2 * num_edges + 1u) {
+      : parent(num_points + num_edges, 0u),
+        child_count(num_points + num_edges),
+        child_size(num_points + num_edges) {
     // Initialize the working arrays.
-    size_t const num_points = num_edges + 1u;
     std::fill_n(child_count.begin(), num_points, 1);
     if (!sample_weights)
       std::fill_n(child_size.begin(), num_points, 1.0f);
@@ -58,16 +56,15 @@ class LinkageState {
   }
 };
 
-void process_spanning_tree(
-    LinkageTreeView tree, SpanningTreeView const mst,
+size_t process_spanning_tree(
+    LinkageTreeView tree, SpanningTreeView const mst, size_t const num_points,
     std::optional<array_ref<float>> const sample_weights
 ) {
   nb::gil_scoped_release guard{};
-  size_t const num_edges = mst.size();
-  size_t const num_points = num_edges + 1u;
-  LinkageState state{num_edges, sample_weights};
+  LinkageState state{num_points, mst.size(), sample_weights};
 
-  for (size_t idx = 0; idx < num_edges; ++idx) {
+  size_t idx;
+  for (idx = 0; idx < mst.size(); ++idx) {
     size_t const next = num_points + idx;
     uint64_t const left = state.find(mst.parent[idx]);
     uint64_t const right = state.find(mst.child[idx]);
@@ -76,14 +73,18 @@ void process_spanning_tree(
         next, left, right
     );
   }
+
+  return idx;
 }
 
 LinkageTree compute_linkage_tree(
-    SpanningTree const mst, std::optional<array_ref<float>> const sample_weights
+    SpanningTree const mst, size_t const num_points,
+    std::optional<array_ref<float>> const sample_weights
 ) {
-  size_t const num_edges = mst.size();
-  auto [tree_view, tree_cap] = LinkageTree::allocate(num_edges);
-  process_spanning_tree(tree_view, mst.view(), sample_weights);
+  auto [tree_view, tree_cap] = LinkageTree::allocate(num_points - 1);
+  size_t const num_edges = process_spanning_tree(
+      tree_view, mst.view(), num_points, sample_weights
+  );
   return {tree_view, std::move(tree_cap), num_edges};
 }
 
@@ -119,21 +120,22 @@ NB_MODULE(_linkage_tree, m) {
 
         Parameters
         ----------
-        parent : numpy.ndarray[dtype=uint64, shape=(*)]
+        parent : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             An array of parent node and cluster indices. Clusters are
             labelled with indices starting from the number of points.
-        child : numpy.ndarray[dtype=uint64, shape=(*)]
+        child : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             An array of child node and cluster indices. Clusters are labelled
             with indices starting from the number of points.
-        child_count : numpy.ndarray[dtype=uint64, shape=(*)]
+        child_count : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
             The number of points contained in the child side of the link.
-        child_size : numpy.ndarray[dtype=float32, shape=(*)]
+        child_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The (weighted) size in the child side of the link.
       )";
 
   m.def(
       "compute_linkage_tree", &compute_linkage_tree,
-      nb::arg("minimum_spanning_tree"), nb::arg("sample_weights") = nb::none(),
+      nb::arg("minimum_spanning_tree"), nb::arg("num_points"),
+      nb::arg("sample_weights") = nb::none(),
       R"(
         Constructs a LinkageTree containing a single-linkage
         dendrogram.
@@ -141,9 +143,11 @@ NB_MODULE(_linkage_tree, m) {
         Parameters
         ----------
         minimum_spanning_tree : plscan._spanning_tree.SpanningTree
-            The SpanningTree containing the (sorted) minimum spanning
+            The SpanningTree containing the (sorted/partial) minimum spanning
             tree.
-        sample_weights : numpy.ndarray[dtype=float32, shape=(*)], optional
+        num_points : int
+            The number of data points in the data set.
+        sample_weights : numpy.ndarray[tuple[int], np.dtype[np.float32]], optional
             The data point sample weights. If not provided, all points
             get an equal weight.
 

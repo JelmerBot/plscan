@@ -29,7 +29,7 @@ struct PersistenceTrace {
   PersistenceTrace(PersistenceTrace &&) = default;
   PersistenceTrace(PersistenceTrace const &) = default;
 
-  // Python side constructor with stride check.
+  // Python side constructor.
   PersistenceTrace(
       array_ref<float> const min_size, array_ref<float> const persistence
   )
