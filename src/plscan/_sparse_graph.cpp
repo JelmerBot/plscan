@@ -76,11 +76,13 @@ void apply_core_distances(
 
     // apply core distances
     float const row_core = core_distances[row];
-    for (int32_t idx = start; idx < end; ++idx) {
-      int32_t const col = graph.indices[idx];
-      graph.data[idx] =
-          std::max({graph.data[idx], row_core, core_distances[col]});
-    }
+    for (int32_t idx = start; idx < end; ++idx)
+      // Set infinite distance for negative indices (indicating missing edges)
+      if (int32_t const col = graph.indices[idx]; col < 0)
+        graph.data[idx] = std::numeric_limits<float>::infinity();
+      else
+        graph.data[idx] =
+            std::max({graph.data[idx], row_core, core_distances[col]});
 
     // fill argsort indices
     auto row_order = order_view.subspan(start, end - start);
@@ -147,7 +149,7 @@ NB_MODULE(_sparse_graph, m) {
 
   m.def(
       "extract_core_distances", &extract_core_distances, nb::arg("graph"),
-      nb::arg("min_samples"), nb::arg("is_sorted"),
+      nb::arg("min_samples") = 5, nb::arg("is_sorted") = false,
       R"(
           Extracts core distances from a sparse graph.
 

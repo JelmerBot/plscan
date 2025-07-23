@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import csr_array
-from ._threads import get_num_threads, set_num_threads
+from ._threads import get_max_threads, set_num_threads
 from ._leaf_tree import LeafTree, compute_leaf_tree, apply_size_cut, apply_distance_cut
 from ._condense_tree import CondensedTree, compute_condensed_tree
 from ._linkage_tree import LinkageTree, compute_linkage_tree
@@ -50,6 +50,7 @@ def compute_mutual_spanning_forest(
         graph, min_samples=min_samples, is_sorted=is_sorted
     )
     graph = compute_mutual_reachability(graph, core_distances)
+    mut_graph = copy_sparse_graph(graph)
     spanning_tree = compute_spanning_forest(graph)
     order = np.argsort(spanning_tree.distance)
     spanning_tree = SpanningTree(
@@ -57,7 +58,7 @@ def compute_mutual_spanning_forest(
         child=spanning_tree.child[order],
         distance=spanning_tree.distance[order],
     )
-    return spanning_tree, core_distances
+    return spanning_tree, mut_graph, core_distances
 
 
 def clusters_from_spanning_forest(
@@ -112,24 +113,36 @@ def clusters_from_spanning_forest(
         sorted_mst,
         num_points,
         min_cluster_size=min_cluster_size,
-        max_cluster_size=max_cluster_size,
         sample_weights=sample_weights,
     )
-    leaf_tree = compute_leaf_tree(
-        condensed_tree, num_points, min_cluster_size=min_cluster_size
-    )
+    if condensed_tree.cluster_rows.size == 0:
+        leaf_tree = LeafTree(
+            np.array([0], dtype=np.uint32),
+            np.array([sorted_mst.distance[0]], dtype=np.float32),
+            np.array([sorted_mst.distance[-1]], dtype=np.float32),
+            np.array([min_cluster_size], dtype=np.float32),
+            np.array([num_points], dtype=np.float32),
+        )
+    else:
+        leaf_tree = compute_leaf_tree(
+            condensed_tree, num_points, min_cluster_size=min_cluster_size
+        )
     if use_bi_persistence:
         trace = compute_bi_persistence(leaf_tree, condensed_tree, num_points)
     else:
         trace = compute_size_persistence(leaf_tree)
-    selected_clusters = most_persistent_clusters(leaf_tree, trace)
+    selected_clusters = most_persistent_clusters(
+        leaf_tree, trace, max_cluster_size=max_cluster_size
+    )
     labels = compute_cluster_labels(
         leaf_tree, condensed_tree, selected_clusters, num_points
     )
     return labels, selected_clusters, trace, leaf_tree, condensed_tree, linkage_tree
 
 
-def most_persistent_clusters(leaf_tree: LeafTree, trace: PersistenceTrace):
+def most_persistent_clusters(
+    leaf_tree: LeafTree, trace: PersistenceTrace, max_cluster_size: float = np.inf
+):
     """
     Selects the most persistent clusters based on the total persistence trace.
 
@@ -145,7 +158,11 @@ def most_persistent_clusters(leaf_tree: LeafTree, trace: PersistenceTrace):
     selected_clusters : np.ndarray[tuple[int], np.dtype[np.int64]]
         The condensed tree parent IDS for the most persistent leaf-clusters.
     """
-    best_birth = trace.min_size[np.argmax(trace.persistence)]
+    idx = np.searchsorted(trace.min_size, max_cluster_size, side="right")
+    persistences = trace.persistence[:idx]
+    if persistences.size == 0:
+        return np.array([], dtype=np.uint32)
+    best_birth = trace.min_size[np.argmax(persistences)]
     return apply_size_cut(leaf_tree, best_birth)
 
 
@@ -170,8 +187,8 @@ def knn_to_csr(
     graph : scipy.sparse.csr_array
         A sparse distance matrix in CSR format.
     """
-    indices = indices[:, 1:].astype(np.int32, order="C", copy=False)
-    distances = distances[:, 1:].astype(np.float32, order="C", copy=False)
+    indices = indices[:, 1:].astype(np.int32)
+    distances = distances[:, 1:].astype(np.float32)
     num_points, num_neighbors = distances.shape
     indptr = np.arange(num_points + 1, dtype=np.int32) * num_neighbors
     return csr_array(
@@ -181,7 +198,7 @@ def knn_to_csr(
 
 
 def distance_matrix_to_csr(
-    distances: np.ndarray[tuple[int, int], np.dtype[np.float32]],
+    distances: np.ndarray[tuple[int, int], np.dtype[np.float32]], copy: bool = True
 ):
     """
     Converts a dense 2D distance matrix into a CSR matrix.
@@ -197,6 +214,8 @@ def distance_matrix_to_csr(
         A sparse distance matrix in CSR format.
     """
     num_points, num_neighbors = distances.shape
+    distances = distances.astype(np.float32, order="C", copy=copy)
+    np.fill_diagonal(distances, 0.0)
     distances = distances.reshape(-1)
     indices = np.tile(np.arange(num_points, dtype=np.int32), num_points)
     indptr = np.arange(num_points + 1, dtype=np.int32) * num_neighbors
@@ -220,7 +239,31 @@ def remove_self_loops(graph: csr_array):
         The input sparse graph with self-loops removed.
     """
     # Remove self-loops
+    graph = csr_array(
+        (
+            graph.data.astype(np.float32),
+            graph.indices.astype(np.int32),
+            graph.indptr.astype(np.int32),
+        ),
+        shape=graph.shape,
+    )
     diag = graph.diagonal().nonzero()
     graph[diag, diag] = 0.0
     graph.eliminate_zeros()
     return graph
+
+
+def copy_sparse_graph(graph: SparseGraph):
+    """Creates a new SparseGraph with data and indices copies.
+
+    Parameters
+    ----------
+    graph : SparseGraph
+        The input sparse graph to copy.
+
+    Returns
+    -------
+    new_graph : SparseGraph
+        A new SparseGraph instance with copied data and indices.
+    """
+    return SparseGraph(graph.data.copy(), graph.indices.copy(), graph.indptr)

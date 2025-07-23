@@ -140,13 +140,13 @@ class CondensedTree(object):
         )
         for leaf_idx, parent in enumerate(self._leaf_tree.parent):
             if parent == 0:
-                g.add_edge((self._num_points, leaf_idx + self._num_points))
+                g.add_edge(self._num_points, leaf_idx + self._num_points)
         return g
 
     def plot(
         self,
         *,
-        leaf_separation: float = 0.3,
+        leaf_separation: float = 0.8,
         cmap: str | Colormap = "viridis",
         colorbar: bool = True,
         log_size: bool = False,
@@ -249,8 +249,13 @@ class CondensedTree(object):
         ellipses = []
         connecting_lines = []
         continuation_lines = []
+        # correct for cases where there are no direct phantom root child points!
+        if self._tree.parent[0] != self._num_points and x_coords[1] == x_coords[0]:
+            _i = 0
+        else:
+            _i = 1
         for segment_idx, (trace, parent_idx, segment_dist) in enumerate(
-            zip(traces[1:], parents[1:], death_dist[1:]), 1
+            zip(traces[_i:], parents[1:], death_dist[1:]), 1
         ):
             dist_trace, size_trace = self._prepare_trace(trace, segment_dist)
             if parent_idx == 0:
@@ -278,7 +283,7 @@ class CondensedTree(object):
                 # horizontal connecting line to parent
                 segment_x = x_coords[segment_idx]
                 if size_trace.shape[0] > 0:
-                    offset = size_trace[-1] / max_size * 0.5
+                    offset = size_trace[-1] / max_size * 0.25
                     if segment_x > x_coords[parent_idx]:
                         segment_x += offset
                     else:
@@ -375,7 +380,7 @@ class CondensedTree(object):
     @classmethod
     def _plot_icicle(cls, x, dist_trace, size_trace, max_size, cmap):
         xs = np.array([[x], [x]])
-        widths = xs + size_trace / max_size * np.array([[-0.5], [0.5]])
+        widths = xs + size_trace / max_size * np.array([[-0.25], [0.25]])
         return plt.pcolormesh(
             widths,
             np.broadcast_to(dist_trace, (2, dist_trace.shape[0])),
@@ -434,7 +439,7 @@ class LeafTree(object):
         The leaf tree parent IDS for the selected clusters.
     persistence_trace : plscan.api.PersistenceTrace
         The persistence trace for the leaf tree.
-    num_points : int
+    _num_points : int
         The number of points in the leaf tree.
     """
 
@@ -472,6 +477,7 @@ class LeafTree(object):
         """
         dtype = [
             ("parent", np.uint64),
+            ("min_distance", np.float32),
             ("max_distance", np.float32),
             ("min_size", np.float32),
             ("max_size", np.float32),
@@ -579,7 +585,7 @@ class LeafTree(object):
     def plot(
         self,
         *,
-        leaf_separation: float = 0.1,
+        leaf_separation: float = 0.8,
         cmap: str | Colormap = "viridis_r",
         colorbar: bool = True,
         label_clusters: bool = False,
@@ -652,13 +658,20 @@ class LeafTree(object):
             else:
                 ellipse_colors = plt.get_cmap(selection_palette).colors
 
-        best_size = self._persistence_trace.min_size[
-            np.argmax(self._persistence_trace.persistence) + 1
-        ]
+        if len(self._chosen_segments) == 0:
+            best_size = self._tree.max_size[0] / 2
+        else:
+            best_size = max(
+                self._tree.min_size[k] for k in self._chosen_segments.keys()
+            )
         cmap = plt.get_cmap(cmap)
         cmap_norm = BoundaryNorm(np.linspace(1, 10, 10), cmap.N)
         min_size_traces, width_traces = self._compute_icicle_traces()
-        max_width = max(trace[0] for trace in width_traces if trace.size > 0)
+        non_empty_traces = [trace[0] for trace in width_traces if trace.size > 0]
+        if len(non_empty_traces) == 0:
+            max_width = 1
+        else:
+            max_width = max(non_empty_traces)
 
         bar = None
         for leaf_idx, (parent_idx, size_trace, width_trace) in enumerate(
@@ -689,7 +702,7 @@ class LeafTree(object):
             # draw horizontal connecting line to parent
             segment_x = x
             if size_trace.size > 0:
-                offset = width_trace[-1] / max_width * 0.5
+                offset = width_trace[-1] / max_width * 0.25
                 if x > x_coords[parent_idx]:
                     segment_x = x + offset
                 else:
@@ -729,7 +742,7 @@ class LeafTree(object):
             # draw the icicle segment
             if size_trace.size > 0:
                 xs = np.asarray([[x], [x]])
-                widths = xs + width_trace / max_width * np.array([[-0.5], [0.5]])
+                widths = xs + width_trace / max_width * np.array([[-0.25], [0.25]])
 
                 j = 0
                 measure = np.empty_like(size_trace)
@@ -784,9 +797,8 @@ class LeafTree(object):
         for side in ("right", "top", "bottom"):
             plt.gca().spines[side].set_visible(False)
 
-        # plt.xticks([])
-        xlim = plt.xlim(x_coords.min(), x_coords.max())
-        plt.xlim([xlim[0] - 0.05 * xlim[1], 1.05 * xlim[1]])
+        plt.xticks([])
+        plt.xlim(x_coords.min() - leaf_separation, x_coords.max() + leaf_separation)
         plt.ylim(0, self._tree.min_size[0])
         plt.ylabel("Minimum cluster size")
         return x_coords
@@ -908,7 +920,7 @@ class PersistenceTrace(object):
             dict(min_size=self._trace.min_size, persistence=self._trace.persistence)
         )
 
-    def plot(self, linekwargs: dict | None = None):
+    def plot(self, line_kws: dict | None = None):
         """
         Plots the total persistence trace.
 
@@ -918,18 +930,18 @@ class PersistenceTrace(object):
 
         Parameters
         ----------
-        linekwargs : dict, optional
+        line_kws : dict, optional
             Additional keyword arguments for the line plot. Defaults to None.
         """
-        if linekwargs is None:
-            linekwargs = dict()
+        if line_kws is None:
+            line_kws = dict()
 
         plt.plot(
             np.column_stack(
                 (self._trace.min_size[:-1], self._trace.min_size[1:])
             ).reshape(-1),
             np.repeat(self._trace.persistence[:-1], 2),
-            **linekwargs,
+            **line_kws,
         )
         plt.ylim([0, plt.ylim()[1]])
         plt.xlabel("Birth size in $(\\text{birth}, \\text{death}]$")

@@ -19,11 +19,10 @@ class SpanningState {
   std::vector<uint32_t> parent;
   std::vector<uint32_t> rank;
   std::vector<int32_t> remap;
-
- public:
   std::vector<uint32_t> component;
   std::vector<Edge> candidates;
 
+ public:
   explicit SpanningState(size_t const num_points)
       : parent(num_points),
         rank(num_points, 0u),
@@ -32,6 +31,18 @@ class SpanningState {
         candidates(num_points, Edge{}) {
     std::iota(parent.begin(), parent.end(), 0u);
     std::ranges::copy(parent, component.begin());
+  }
+
+  [[nodiscard]] NB_INLINE std::vector<Edge> &candidates_ref() {
+    return candidates;
+  }
+
+  [[nodiscard]] NB_INLINE std::span<Edge const> candidates_view() const {
+    return candidates;
+  }
+
+  [[nodiscard]] NB_INLINE std::span<uint32_t const> component_view() const {
+    return component;
   }
 
   NB_INLINE void update(size_t const num_components) {
@@ -77,9 +88,9 @@ void combine_vectors(std::vector<Edge> &dest, std::vector<Edge> const &src) {
         merge_edges : std::vector<Edge> : combine_vectors(omp_out, omp_in) \
 ) initializer(omp_priv = omp_orig)
 
-void fill_candidates(SpanningState &state, SparseGraphView const graph) {
-  std::vector<Edge> &candidates = state.candidates;
-  std::span const component(state.component);
+void find_candidates(SpanningState &state, SparseGraphView const graph) {
+  std::vector<Edge> &candidates = state.candidates_ref();
+  std::span<uint32_t const> const component = state.component_view();
 
   // clang-format off
   #pragma omp parallel for default(none) shared(graph, component) reduction(merge_edges : candidates)  // clang-format on
@@ -96,7 +107,7 @@ size_t apply_candidates(
     SpanningTreeView tree, SpanningState &state, size_t &num_edges
 ) {
   size_t const start_count = num_edges;
-  for (auto [parent, child, distance] : state.candidates) {
+  for (auto [parent, child, distance] : state.candidates_view()) {
     if (child < 0)
       continue;
     uint32_t const from = state.find(static_cast<uint32_t>(parent));
@@ -111,9 +122,10 @@ size_t apply_candidates(
   return num_edges - start_count;
 }
 
-void update_graph(
-    SparseGraphView const graph, std::span<uint32_t> const component
-) {  // clang-format off
+void update_graph(SpanningState const &state, SparseGraphView const graph) {
+  std::span<uint32_t const> const component = state.component_view();
+
+  // clang-format off
   #pragma omp parallel for default(none) shared(graph, component)  // clang-format on
   for (int32_t row = 0; row < graph.size(); ++row) {
     int32_t const start = graph.indptr[row];
@@ -145,19 +157,20 @@ size_t process_graph(SpanningTreeView tree, SparseGraphView const graph) {
   SpanningState state(num_components);
 
   while (num_components > 1) {
-    fill_candidates(state, graph);
+    find_candidates(state, graph);
     size_t const new_edges = apply_candidates(tree, state, num_edges);
     if (new_edges == 0)
       break;
 
     num_components -= new_edges;
     state.update(num_components);
-    update_graph(graph, state.component);
+    update_graph(state, graph);
   }
   return num_edges;
 }
 
 SpanningTree compute_spanning_forest(SparseGraph graph) {
+  // Build the spanning tree structure
   auto [tree_view, tree_cap] = SpanningTree::allocate(graph.size() - 1u);
   size_t num_edges = process_graph(tree_view, graph.view());
   return {tree_view, std::move(tree_cap), num_edges};

@@ -20,11 +20,6 @@ class PLSCAN(ClusterMixin, BaseEstimator):
     it computes the total leaf-cluster persistence per minimum cluster size, and
     picks the minimum cluster size that maximizes that score.
 
-    If the input contains mutual reachability distances, the `min_cluster_size`
-    should be set to the number of neighbors used to compute those mutual
-    reachability distances. The `max_cluster_size` parameter can be used as
-    additional constraint if desired.
-
     The leaf-cluster hierarch in `leaf_tree_` can be plotted as an alternative
     to HDBSCAN*'s condensed cluster tree.
 
@@ -32,19 +27,17 @@ class PLSCAN(ClusterMixin, BaseEstimator):
     be computed using the `cluster_layers` method. This method finds the
     persistence peaks and returns their cluster labels and memberships.
 
-    The input should be a (partial) minimum spanning tree. If it contains
-    multiple connected components, the optimal minimum cluster size is selected
-    to maximize the total persistence of over all components. The algorithm
-    always selects multiple clusters per connected component. In other words,
-    the connected component(s) themselves are never selected as cluster(s).
-
     Parameters
     ----------
     min_samples : int, default=5
         The number of neighbors to use for computing core distances and the
-        mutual reachability distances.
+        mutual reachability distances. Higher values produce smoother density
+        profiles with fewer peaks. Minimum spanning tree inputs are assumed to
+        contain mutual reachability distances and ignore this parameter.
     min_cluster_size : float, optional
-        The minimum size limit for clusters, by default 2.0.
+        The minimum size limit for clusters, defaults to the value of
+        min_samples. Values below min_samples are not allowed, as the
+        leaf-clusters produced by those values can be incomplete and arbitrary.
     max_cluster_size : float, optional
         The maximum size limit for clusters, by default np.inf.
     use_bi_persistence : bool, optional
@@ -52,8 +45,8 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         selecting the optimal minimum cluster size. Default is False.
     num_threads : int, optional
         The number of threads to use for parallel computations, value must be
-        positive!. If None, OpenMP's default thread count is used. Default is
-        None.
+        positive. If None, OpenMP's default maximum thread count is used.
+        Default is None.
 
     Attributes
     ----------
@@ -76,7 +69,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         The condensed cluster tree showing which distance-contour clusters exist
         in the data. The object has as plotting function and conversion methods
         for networkx, pandas, and numpy.
-    linkage_tree_ : np.ndarray[tuple[int, int], np.dtype[np.float64]]
+    single_linkage_tree_ : np.ndarray[tuple[int, int], np.dtype[np.float64]]
         A single linkage dendrogram in scipy format. The first column represents
         the link's parent, the second column represents the link's child, and
         the third column represents the link's distance.
@@ -135,7 +128,15 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         **fit_params,
     ):
         """
-        Fit the PLSCAN clustering model to the input data.
+        Computes PLSCAN clusters and hierarchies for the input data. Several
+        inputs are supported, including precomputed sorted (partial) minimums
+        spanning trees, dense or sparse distance matrices, and k-nearest
+        neighbors graphs.
+
+        The input data does not have to form a single connected component, and
+        the algorithm will select the minimum cluster size that maximizes the
+        total persistence over all components. The components themselves are
+        never selected as clusters.
 
         Parameters
         ----------
@@ -144,30 +145,26 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             following formats:
 
             1. tuple of (edges, num_points)
-                A minimum spanning tree where `edges` is a 2D array of edges in
-                the format (parent, child, distance) and `num_points` is the
-                number of points in the input data. There should be at most
-                `num_points - 1` edges. Edges must be sorted by distance.
+                A minimum spanning tree where `edges` is a 2D array in the
+                format (parent, child, distance) and `num_points` is the number
+                of points in the input data. There should be at most `num_points
+                - 1` edges. Edges must be sorted by distance.
             2. tuple of (distances, indices)
                 A k-nearest neighbors graph where `distances` is a 2D array of
-                distances and `indices` is a 2D array of child indices.
+                distances and `indices` is a 2D array of child indices. Rows
+                must be sorted by distance. Negative indices indicate missing
+                edges and must occur after all valid edges in their row.
             3. np.ndarray[tuple[int, ...], np.dtype[np.float32]]:
-                A condensed or full square distance matrix.
+                A condensed or full square distance matrix. The diagonal is
+                filled with zeros before processing.
             4. csr_array:
-                A sparse distance matrix in CSR format. Self-loops are removed
-                before processing.
+                A sparse distance matrix in CSR format. Self-loops and explicit
+                zeros are removed before processing.
 
             In all cases, distance values should be non-negative. In cases 2
             through 4, each point should have `min_samples` neighbors. Infinite
             distances, either as input or as a result of too few neighbors, may
-            break plots and the bi-persistence computation. Negative kNN indices
-            are ignored.
-
-            The input distances do not have to form a single connected
-            component! If there are multiple connected components, the algorithm
-            will select the minimum cluster size that maximizes the total
-            persistence over all components. The components themselves are never
-            selected as clusters.
+            break plots and the bi-persistence computation.
         y : None, optional
             Ignored, present for compatibility with scikit-learn.
         sample_weights : np.ndarray[tuple[int], np.dtype[np.float32]], optional
@@ -194,33 +191,32 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                 )
         if self.max_cluster_size <= self.min_cluster_size:
             raise InvalidParameterError(
-                "Minimum cluster size must be less than maximum cluster size."
+                "Maximum cluster size must be greater than the minimum cluster size."
             )
         if self.num_threads is not None:
-            default_thread_count = api.get_num_threads()
             api.set_num_threads(self.num_threads)
 
         # Validate input
-        X, num_points, is_sorted, is_mst = self._check_input(X)
+        X, self._num_points, is_sorted, is_mst = self._check_input(X)
         if sample_weights is not None:
             sample_weights = _check_sample_weight(
                 sample_weights,
-                csr_array((num_points, num_points)),
+                csr_array((self._num_points, self._num_points)),
                 dtype=np.float32,
                 ensure_non_negative=True,
             )
 
         # Perform clustering
-        self._num_points = num_points
         if is_mst:
-            self.core_distances = None
+            self.core_distances_ = None
+            self._mutual_graph = None
             self._minimum_spanning_tree = api.SpanningTree(
-                X[:, 0].astype(np.uint32, order="C", copy=False),
-                X[:, 1].astype(np.uint32, order="C", copy=False),
-                X[:, 2].astype(np.float32, order="C", copy=False),
+                X[:, 0].astype(np.uint32, copy=False),
+                X[:, 1].astype(np.uint32, copy=False),
+                X[:, 2].astype(np.float32, copy=False),
             )
         else:
-            self._minimum_spanning_tree, self.core_distances_ = (
+            (self._minimum_spanning_tree, self._mutual_graph, self.core_distances_) = (
                 api.compute_mutual_spanning_forest(
                     X, min_samples=self.min_samples, is_sorted=is_sorted
                 )
@@ -243,7 +239,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         # Reset the number of threads back to the default
         if self.num_threads is not None:
-            api.set_num_threads(default_thread_count)
+            api.set_num_threads(api.get_max_threads())
         return self
 
     @property
@@ -253,7 +249,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
     @property
     def leaf_tree_(self):
-        check_is_fitted(self, ("labels_"))
+        check_is_fitted(self, ("_leaf_tree"))
         return plots.LeafTree(
             self._leaf_tree,
             self._condensed_tree,
@@ -264,7 +260,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
     @property
     def condensed_tree_(self):
-        check_is_fitted(self, ("labels_"))
+        check_is_fitted(self, ("_condensed_tree"))
         return plots.CondensedTree(
             self._leaf_tree,
             self._condensed_tree,
@@ -274,19 +270,19 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
     @property
     def single_linkage_tree_(self):
-        check_is_fitted(self, ("labels_"))
+        check_is_fitted(self, ("_linkage_tree"))
         return np.column_stack(
             (
                 self._linkage_tree.parent,
                 self._linkage_tree.child,
-                self.linkage_tree.distance,
+                self._minimum_spanning_tree.distance,
                 self._linkage_tree.child_size,
             )
         )
 
     @property
     def minimum_spanning_tree_(self):
-        check_is_fitted(self, "labels_")
+        check_is_fitted(self, "_minimum_spanning_tree")
         return np.column_stack(tuple(self._minimum_spanning_tree))
 
     def cluster_layers(
@@ -334,7 +330,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             membership probabilities for the corresponding peak.
 
         """
-        check_is_fitted(self, "labels_")
+        check_is_fitted(self, "_persistence_trace")
         x, y = self._persistence_trace
         peaks = find_peaks(y, height=height, threshold=threshold, **kwargs)[0]
 
@@ -343,10 +339,10 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         if max_size is not None:
             peaks = peaks[x[peaks] <= max_size]
         if n_peaks is not None:
-            peak_idx = -n_peaks
+            peak_idx = -min(n_peaks, len(peaks))
             limit = np.partition(y[peaks], peak_idx)[peak_idx]
             peaks = peaks[y[peaks] >= limit]
-        return [(x[peak], *self.min_cluster_size_cut(x[peak])) for peak in peaks], peaks
+        return [(x[peak], *self.min_cluster_size_cut(x[peak])) for peak in peaks]
 
     def distance_cut(self, epsilon: float):
         """
@@ -366,10 +362,10 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         probabilities : np.ndarray[tuple[int], np.dtype[np.float32]]
             The membership probabilities for each point in the input data.
         """
-        check_is_fitted(self, "labels_")
+        check_is_fitted(self, "_leaf_tree")
         selected_clusters = api.apply_distance_cut(self._leaf_tree, epsilon)
         return api.compute_cluster_labels(
-            self._leaf_tree, self._condensed_tree, selected_clusters
+            self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
         )
 
     def min_cluster_size_cut(self, cut_size: float):
@@ -390,7 +386,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         probabilities : np.ndarray[tuple[int], np.dtype[np.float32]]
             The membership probabilities for each point in the input data.
         """
-        check_is_fitted(self, "labels_")
+        check_is_fitted(self, "_leaf_tree")
         selected_clusters = api.apply_size_cut(self._leaf_tree, cut_size)
         return api.compute_cluster_labels(
             self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
@@ -409,17 +405,19 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         # Check distance matrix input
         X = check_array(
             X,
-            dtype=np.float32,
             accept_sparse="csr",
             ensure_2d=False,
             ensure_non_negative=True,
+            ensure_all_finite=False,
             ensure_min_samples=self.min_samples,
             input_name="X",
         )
 
         # Check input is square
+        copy = True
         if X.ndim == 1:
             X = squareform(X)
+            copy = False
         elif X.shape[0] != X.shape[1]:
             raise ValueError(
                 "Distance matrix must be square, got shape " f"{X.shape} instead."
@@ -427,9 +425,9 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         # Convert to valid CSR format
         if issparse(X):
-            X = api.remove_self_loops(X.tocsr())
+            X = api.remove_self_loops(X)
         else:
-            X = api.distance_matrix_to_csr(X)
+            X = api.distance_matrix_to_csr(X, copy=copy)
         return X, X.shape[0], False, False
 
     def _check_knn(self, X):
@@ -448,6 +446,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         distances = check_array(
             distances,
             ensure_non_negative=True,
+            ensure_all_finite=False,
             ensure_min_features=self.min_samples + 1,
             ensure_min_samples=self.min_samples + 1,
             input_name="kNN distances",
@@ -468,13 +467,12 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                 f"got {len(X)} elements instead."
             )
         edges, num_points = X
-        edges = check_array(
-            edges,
-            dtype=np.float64,
-            ensure_non_negative=True,
-            ensure_min_samples=self.min_samples + 1,
-            input_name="MST edges",
-        )
+        if num_points < self.min_samples:
+            raise ValueError(
+                f"Number of points in MST must be at least {self.min_samples}, "
+                f"got {num_points} instead."
+            )
+        edges = check_array(edges, ensure_non_negative=True, input_name="MST edges")
         if edges.shape[1] != 3:
             raise ValueError(
                 "MST edges must have shape (n_edges, 3), " f"got {edges.shape} instead."

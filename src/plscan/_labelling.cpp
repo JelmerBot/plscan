@@ -6,7 +6,7 @@
 #include "_leaf_tree.h"
 
 [[nodiscard]] std::vector<int32_t> compute_segment_labels(
-    LeafTreeView const leaf_tree, std::span<int32_t> const selected
+    LeafTreeView const leaf_tree, std::span<uint32_t> const selected
 ) {
   size_t const num_segments = leaf_tree.size();
   size_t const num_clusters = selected.size();
@@ -28,12 +28,12 @@
 }
 
 [[nodiscard]] std::vector<float> compute_leaf_persistence(
-    LeafTreeView const leaf_tree, std::span<int32_t> const selected
+    LeafTreeView const leaf_tree, std::span<uint32_t> const selected
 ) {
   size_t const num_clusters = selected.size();
   std::vector<float> leaf_persistence(num_clusters);
   for (size_t label = 0; label < num_clusters; ++label) {
-    int32_t const segment_idx = selected[label];
+    uint32_t const segment_idx = selected[label];
     leaf_persistence[label] = leaf_tree.max_distance[segment_idx] -
                               leaf_tree.min_distance[segment_idx];
   }
@@ -43,7 +43,7 @@
 void fill_labels(
     LabellingView result, LeafTreeView const leaf_tree,
     CondensedTreeView const condensed_tree,
-    std::span<int32_t> const selected_clusters,
+    std::span<uint32_t> const selected_clusters,
     std::vector<int32_t> const &segment_labels,
     std::vector<float> const &leaf_persistence, size_t const num_points
 ) {
@@ -74,7 +74,7 @@ void fill_labels(
 void compute_labels(
     LabellingView result, LeafTreeView const leaf_tree,
     CondensedTreeView const condensed_tree,
-    std::span<int32_t> const selected_clusters, size_t const num_points
+    std::span<uint32_t> const selected_clusters, size_t const num_points
 ) {
   nb::gil_scoped_release guard{};
   auto const segment_labels = compute_segment_labels(
@@ -91,7 +91,7 @@ void compute_labels(
 
 Labelling compute_cluster_labels(
     LeafTree const leaf_tree, CondensedTree const condensed_tree,
-    array_ref<int32_t> const selected_clusters, size_t const num_points
+    array_ref<uint32_t> const selected_clusters, size_t const num_points
 ) {
   Labelling result{num_points};
   compute_labels(

@@ -7,7 +7,7 @@ NB_MODULE(_threads, m) {
   m.doc() = "Module for adjusting how many threads PLSCAN uses.";
 
   m.def(
-      "get_num_threads", &omp_get_max_threads,
+      "get_max_threads", &omp_get_max_threads,
       R"(Returns the default number of OpenMP threads used.)"
   );
 

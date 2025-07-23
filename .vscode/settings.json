@@ -65,7 +65,9 @@
     "xutility": "cpp",
     "span": "cpp",
     "ranges": "cpp",
-    "numeric": "cpp"
+    "numeric": "cpp",
+    "xtree": "cpp",
+    "map": "cpp"
   },
   "python.languageServer": "Pylance",
   "python.analysis.stubPath": "C:\\Users\\jelme\\miniforge3\\Lib\\site-packages",

@@ -41,8 +41,7 @@ struct CondenseState {
 
   template <typename function_t>
   auto process_rows(
-      size_t const num_points, float const min_size, float const max_size,
-      function_t get_row
+      size_t const num_points, float const min_size, function_t get_row
   ) {
     size_t const num_edges = linkage_tree.size();
     auto next_label = static_cast<uint32_t>(num_points);
@@ -57,10 +56,7 @@ struct CondenseState {
       // Append or write points to reserved spots.
       size_t out_idx = update_output_index(row, idx, node_idx, min_size);
       store_or_delay(row, out_idx, num_points, min_size);
-
       // Write rows for cluster merges.
-      if (row.left_size > max_size && row.right_size > max_size)
-        continue;
 
       if (row.left_size >= min_size && row.right_size >= min_size)
         write_merge(row, idx, cluster_count, next_label, num_points);
@@ -195,13 +191,13 @@ struct CondenseState {
 std::pair<size_t, size_t> process_hierarchy(
     CondensedTreeView tree, LinkageTreeView const linkage,
     SpanningTreeView const mst, size_t const num_points, float const min_size,
-    float const max_size, std::optional<array_ref<float>> const sample_weights
+    std::optional<array_ref<float>> const sample_weights
 ) {
   nb::gil_scoped_release guard{};
   CondenseState state{tree, linkage, mst, num_points};
   if (sample_weights) {
     return state.process_rows(
-        num_points, min_size, max_size,
+        num_points, min_size,
         [&state,
          weights = std::span(sample_weights->data(), sample_weights->size())](
             size_t const node_idx, size_t const num_points
@@ -209,7 +205,7 @@ std::pair<size_t, size_t> process_hierarchy(
     );
   }
   return state.process_rows(
-      num_points, min_size, max_size,
+      num_points, min_size,
       [&state](size_t const node_idx, size_t const num_points) {
         return state.get_row(node_idx, num_points);
       }
@@ -218,12 +214,11 @@ std::pair<size_t, size_t> process_hierarchy(
 
 CondensedTree compute_condensed_tree(
     LinkageTree const linkage, SpanningTree const mst, size_t const num_points,
-    float const min_size, float const max_size,
-    std::optional<array_ref<float>> const sample_weights
+    float const min_size, std::optional<array_ref<float>> const sample_weights
 ) {
   auto [tree_view, tree_cap] = CondensedTree::allocate(linkage.size());
   auto [filled_edges, cluster_count] = process_hierarchy(
-      tree_view, linkage.view(), mst.view(), num_points, min_size, max_size,
+      tree_view, linkage.view(), mst.view(), num_points, min_size,
       sample_weights
   );
   return {tree_view, std::move(tree_cap), filled_edges, cluster_count};
@@ -283,7 +278,6 @@ NB_MODULE(_condense_tree, m) {
       "compute_condensed_tree", &compute_condensed_tree,
       nb::arg("linkage_tree"), nb::arg("minimum_spanning_tree"),
       nb::arg("num_points"), nb::arg("min_cluster_size") = 5.0f,
-      nb::arg("max_cluster_size") = std::numeric_limits<float>::infinity(),
       nb::arg("sample_weights") = nb::none(),
       R"(
         Prunes a linkage tree to create a condensed tree.
@@ -298,9 +292,6 @@ NB_MODULE(_condense_tree, m) {
         min_cluster_size : float, optional
             The minimum size of clusters to be included in the condensed tree.
             Default is 5.0.
-        max_cluster_size : float, optional
-            The maximum size of clusters to be included in the condensed tree.
-            Default is np.inf.
         sample_weights : numpy.ndarray[tuple[int], np.dtype[np.float32]], optional
             The data point sample weights. If not provided, all points get an
             equal weight. Must have a value for each data point!
