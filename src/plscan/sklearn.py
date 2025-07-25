@@ -115,10 +115,6 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         self.use_bi_persistence = use_bi_persistence
         self.num_threads = num_threads
 
-        self.labels_ = None
-        self.probabilities_ = None
-        self.selected_clusters_ = None
-
     def fit(
         self,
         X,

@@ -2,14 +2,11 @@
 
 import pytest
 import numpy as np
-from plscan import PLSCAN
+import matplotlib.pyplot as plt
+from sklearn.utils.estimator_checks import check_estimator
 from sklearn.utils._param_validation import InvalidParameterError
 from sklearn.exceptions import NotFittedError
-
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    plt = None
+from matplotlib.testing.decorators import image_comparison
 
 try:
     import networkx as nx
@@ -21,9 +18,10 @@ try:
 except ImportError:
     pd = None
 
+from plscan import PLSCAN
 from .checks import *
 
-# Inputs
+# Valid inputs
 
 
 def test_mst(X, mst):
@@ -335,58 +333,7 @@ def test_bad_sample_weights(X, knn):
         PLSCAN().fit(knn, sample_weights=sample_weights)
 
 
-# Plots
-
-
-@pytest.mark.skipif(plt is None, reason="matplotlib not installed")
-def test_condensed_tree(knn):
-    c = PLSCAN().fit(knn)
-    c.condensed_tree_.plot()
-    plt.close()
-    c.condensed_tree_.plot(
-        leaf_separation=0.15,
-        cmap="turbo",
-        colorbar=False,
-        log_size=True,
-        distance_ranks=False,
-        label_clusters=True,
-        select_clusters=True,
-        selection_palette="tab20",
-        continuation_line_kws=dict(color="red"),
-        connect_line_kws=dict(linewidth=0.4),
-        colorbar_kws=dict(fraction=0.01),
-        label_kws=dict(ha="left"),
-    )
-    plt.close()
-
-
-@pytest.mark.skipif(plt is None, reason="matplotlib not installed")
-def test_leaf_tree(knn):
-    c = PLSCAN().fit(knn)
-    c.leaf_tree_.plot()
-    plt.close()
-    c.leaf_tree_.plot(
-        leaf_separation=0.15,
-        cmap="turbo",
-        colorbar=False,
-        label_clusters=True,
-        select_clusters=True,
-        selection_palette="tab20",
-        connect_line_kws=dict(linewidth=0.4),
-        parent_line_kws=dict(color="red"),
-        colorbar_kws=dict(fraction=0.01),
-        label_kws=dict(ha="left"),
-    )
-    plt.close()
-
-
-@pytest.mark.skipif(plt is None, reason="matplotlib not installed")
-def test_persistence_trace(knn):
-    c = PLSCAN().fit(knn)
-    c.persistence_trace_.plot()
-    plt.close()
-    c.persistence_trace_.plot(line_kws=dict(color="black", linewidth=0.5))
-    plt.close()
+# Attributes
 
 
 @pytest.mark.skipif(nx is None, reason="networkx not installed")
@@ -490,3 +437,11 @@ def test_min_cluster_size_cut(X, knn):
     labels, probs = c.min_cluster_size_cut(7.0)
     valid_labels(labels, X)
     valid_probabilities(probs, X)
+
+
+# Sklearn Estimator
+
+
+@pytest.mark.skip("Assumes feature inputs, not yet implemented")
+def test_hdbscan_is_sklearn_estimator():
+    check_estimator(PLSCAN())

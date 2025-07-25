@@ -6,3 +6,4 @@ cmake-build*/
 
 __pycache__/
 **/_version.py
+result_images/

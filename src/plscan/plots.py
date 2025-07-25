@@ -308,11 +308,13 @@ class CondensedTree(object):
                 ) and segment_idx in self._chosen_segments:
                     max_dist = self._leaf_tree.max_distance[segment_idx]
                     min_dist = self._leaf_tree.min_distance[segment_idx]
-                    size = self._leaf_tree.max_size[segment_idx]
+                    size = size_trace[0]
                     width = size / max_size
                     height = max_dist - min_dist
                     center = (x_coords[segment_idx], (min_dist + max_dist) / 2)
-                    ellipse = Ellipse(center, leaf_separation + width, 1.4 * height)
+                    ellipse = Ellipse(
+                        center, leaf_separation / 2 + width / 2, 1.4 * height
+                    )
                     if label_clusters:
                         if segment_idx in self._chosen_segments:
                             plt.text(
@@ -727,7 +729,7 @@ class LeafTree(object):
                 height = max_size - min_size
                 width = width_trace[0] if width_trace.size > 0 else 0
                 width /= max_width
-                ellipse = Ellipse(center, leaf_separation + width, 1.2 * height)
+                ellipse = Ellipse(center, leaf_separation / 2 + width / 2, 1.2 * height)
                 if label_clusters:
                     if leaf_idx in self._chosen_segments:
                         plt.text(
