@@ -5,7 +5,7 @@
 #include "_condense_tree.h"
 
 void fill_min_dist(
-    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
+    LeafTreeWriteView leaf_tree, CondensedTreeView const condensed_tree,
     size_t const num_points
 ) {
   // last occurrence in the condensed tree!
@@ -16,7 +16,7 @@ void fill_min_dist(
 }
 
 void fill_parent_and_max_dist(
-    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
+    LeafTreeWriteView leaf_tree, CondensedTreeView const condensed_tree,
     size_t const num_points
 ) {
   // fill default values to match the phantom root cluster.
@@ -35,7 +35,7 @@ void fill_parent_and_max_dist(
 }
 
 void fill_sizes(
-    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
+    LeafTreeWriteView leaf_tree, CondensedTreeView const condensed_tree,
     size_t const num_points, float const min_size
 ) {
   // fill in default min size values
@@ -75,7 +75,7 @@ void fill_sizes(
 }
 
 void process_clusters(
-    LeafTreeView leaf_tree, CondensedTreeView const condensed_tree,
+    LeafTreeWriteView leaf_tree, CondensedTreeView const condensed_tree,
     size_t const num_points, float const min_size
 ) {
   nb::gil_scoped_release guard{};
@@ -91,12 +91,12 @@ LeafTree compute_leaf_tree(
   CondensedTreeView const condensed_view = condensed_tree.view();
   size_t const last_cluster_row = condensed_view.cluster_rows.back();
   size_t const max_label = condensed_view.child[last_cluster_row] - num_points;
-  LeafTree tree{max_label + 1u};
-  process_clusters(tree.view(), condensed_view, num_points, min_size);
-  return tree;
+  auto [tree_view, tree_cap] = LeafTree::allocate(max_label + 1u);
+  process_clusters(tree_view, condensed_view, num_points, min_size);
+  return {tree_view, std::move(tree_cap)};
 };
 
-array_ref<uint32_t> apply_size_cut(
+array_ref<uint32_t const> apply_size_cut(
     LeafTree const &leaf_tree, float const cut_size
 ) {
   size_t num_selected = 0;
@@ -112,7 +112,7 @@ array_ref<uint32_t> apply_size_cut(
   return to_array(out_view, std::move(out_cap), num_selected);
 }
 
-array_ref<uint32_t> apply_distance_cut(
+array_ref<uint32_t const> apply_distance_cut(
     LeafTree const &leaf_tree, float const cut_distance
 ) {
   size_t num_selected = 0;
@@ -133,12 +133,23 @@ NB_MODULE(_leaf_tree, m) {
 
   nb::class_<LeafTree>(m, "LeafTree")
       .def(
-          nb::init<
-              array_ref<uint32_t>, array_ref<float>, array_ref<float>,
-              array_ref<float>, array_ref<float>>(),
-          nb::arg("parent").noconvert(), nb::arg("min_distance").noconvert(),
-          nb::arg("max_distance").noconvert(), nb::arg("min_size").noconvert(),
-          nb::arg("max_size").noconvert()
+          "__init__",
+          [](LeafTree *t, nb::handle parent, nb::handle min_distance,
+             nb::handle max_distance, nb::handle min_size,
+             nb::handle max_size) {
+            // Support np.memmap and np.ndarray input types for sklearn
+            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            auto const asarray = nb::module_::import_("numpy").attr("asarray");
+            new (t) LeafTree(
+                nb::cast<array_ref<uint32_t const>>(asarray(parent), false),
+                nb::cast<array_ref<float const>>(asarray(min_distance), false),
+                nb::cast<array_ref<float const>>(asarray(max_distance), false),
+                nb::cast<array_ref<float const>>(asarray(min_size), false),
+                nb::cast<array_ref<float const>>(asarray(max_size), false)
+            );
+          },
+          nb::arg("parent"), nb::arg("min_distance"), nb::arg("max_distance"),
+          nb::arg("min_size"), nb::arg("max_size")
       )
       .def_ro("parent", &LeafTree::parent, nb::rv_policy::reference)
       .def_ro("min_distance", &LeafTree::min_distance, nb::rv_policy::reference)
@@ -153,6 +164,18 @@ NB_MODULE(_leaf_tree, m) {
                        self.min_size, self.max_size
             )
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](LeafTree const &self) {
+            return nb::make_tuple(
+                nb::type<LeafTree>(),
+                nb::make_tuple(
+                    self.parent, self.min_distance, self.max_distance,
+                    self.min_size, self.max_size
+                )
+            );
           }
       )
       .doc() = R"(

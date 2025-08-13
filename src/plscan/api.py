@@ -1,25 +1,110 @@
 import numpy as np
 from scipy.sparse import csr_array
+from sklearn.neighbors._kd_tree import KDTree32
+from sklearn.neighbors._ball_tree import BallTree32
+
 from ._threads import get_max_threads, set_num_threads
-from ._leaf_tree import LeafTree, compute_leaf_tree, apply_size_cut, apply_distance_cut
-from ._condense_tree import CondensedTree, compute_condensed_tree
-from ._linkage_tree import LinkageTree, compute_linkage_tree
-from ._labelling import Labelling, compute_cluster_labels
-from ._spanning_tree import SpanningTree, compute_spanning_forest
+from ._space_tree import SpaceTree, kdtree_query, balltree_query
 from ._sparse_graph import (
     SparseGraph,
     extract_core_distances,
     compute_mutual_reachability,
 )
+from ._spanning_tree import (
+    SpanningTree,
+    extract_spanning_forest,
+    compute_spanning_tree_kdtree,
+    compute_spanning_tree_balltree,
+)
+from ._linkage_tree import LinkageTree, compute_linkage_tree
+from ._condense_tree import CondensedTree, compute_condensed_tree
+from ._leaf_tree import LeafTree, compute_leaf_tree, apply_size_cut, apply_distance_cut
 from ._persistence_trace import (
     PersistenceTrace,
     compute_size_persistence,
     compute_bi_persistence,
     compute_stability_icicles,
 )
+from ._labelling import Labelling, compute_cluster_labels
 
 
-def compute_mutual_spanning_forest(
+def compute_mutual_spanning_tree(
+    data,
+    *,
+    min_samples: int = 5,
+    space_tree: str = "kdtree",
+    metric: str = "euclidean",
+    metric_kws: dict | None = None,
+):
+    """
+    Computes a mutual reachability spanning tree from data features using a
+    KDTree.
+
+    Parameters
+    ----------
+    data : np.ndarray[tuple(int, int), np.dtype[np.float32]]
+        High dimensional data features. Values must be finite and not missing.
+    space_tree : str
+        The type of spatial tree to use. Default is "kdtree". Valid options are:
+        "kdtree", "balltree". See `metric` for an overview of supported metrics
+        on each tree type.
+    min_samples : int, optional
+        Core distances are the distance to the `min_samples`-th nearest
+        neighbor. Default is 5.
+    metric : str
+        The distance metric to use. Default is "euclidean". Valid options for
+        kd-trees are:
+            "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
+            "infinity", "minkowski", "p".
+        Additional valid options for ball-trees are:
+            "seuclidean", "hamming", "braycurtis", "canberra", "haversine",
+            "mahalanobis", "dice", "jaccard", "russellrao", "rogerstanimoto",
+            "sokalsneath".
+        See sklearn documentation for metric definitions.
+    metric_kws : dict | None
+        Additional keyword arguments for the distance metric. Default is None.
+
+    Returns
+    -------
+    spanning_tree : plscan._spanning_tree.SpanningTree
+        A spanning tree of the input sparse distance matrix.
+    """
+    metric_kws = metric_kws or dict()
+    if metric == "seuclidean" and "V" not in metric_kws:
+        metric_kws["V"] = np.var(data, axis=0)
+    elif metric == "mahalanobis" and "VI" not in metric_kws:
+        metric_kws["VI"] = np.linalg.inv(np.cov(data, rowvar=False))
+
+    if space_tree == "kdtree":
+        tree = KDTree32(data, metric=metric, **metric_kws)
+        query_fun = kdtree_query
+        spanning_tree_fun = compute_spanning_tree_kdtree
+    else:
+        tree = BallTree32(data, metric=metric, **metric_kws)
+        query_fun = balltree_query
+        spanning_tree_fun = compute_spanning_tree_balltree
+
+    data, idx_array, node_data, node_bounds = tree.get_arrays()
+    cpp_tree = SpaceTree(data, idx_array, node_data.view(np.float64), node_bounds)
+
+    # This knn contains explicit self-loops (first edge on each row), increment
+    # min_samples to correct for that!
+    knn = query_fun(
+        cpp_tree, num_neighbors=min_samples + 2, metric=metric, metric_kws=metric_kws
+    )
+    core_distances = extract_core_distances(knn, min_samples + 1, is_sorted=True)
+    spanning_tree = spanning_tree_fun(
+        cpp_tree, knn, core_distances, metric=metric, metric_kws=metric_kws
+    )
+
+    return (
+        sort_spanning_tree(spanning_tree),
+        knn.indices.reshape(data.shape[0], min_samples + 2),
+        core_distances,
+    )
+
+
+def extract_mutual_spanning_forest(
     graph: csr_array, *, min_samples: int = 5, is_sorted: bool = False
 ):
     """
@@ -50,15 +135,30 @@ def compute_mutual_spanning_forest(
         graph, min_samples=min_samples, is_sorted=is_sorted
     )
     graph = compute_mutual_reachability(graph, core_distances)
-    mut_graph = copy_sparse_graph(graph)
-    spanning_tree = compute_spanning_forest(graph)
+    spanning_tree = extract_spanning_forest(graph)
+    return sort_spanning_tree(spanning_tree), graph, core_distances
+
+
+def sort_spanning_tree(spanning_tree):
+    """
+    Sorts the edges of a spanning tree by their distance.
+
+    Parameters
+    ----------
+    spanning_tree : plscan._spanning_tree.SpanningTree
+        The spanning tree to sort.
+
+    Returns
+    -------
+    sorted_mst : plscan._spanning_tree.SpanningTree
+        A new spanning tree with sorted edges.
+    """
     order = np.argsort(spanning_tree.distance)
-    spanning_tree = SpanningTree(
+    return SpanningTree(
         parent=spanning_tree.parent[order],
         child=spanning_tree.child[order],
         distance=spanning_tree.distance[order],
     )
-    return spanning_tree, mut_graph, core_distances
 
 
 def clusters_from_spanning_forest(
@@ -75,7 +175,7 @@ def clusters_from_spanning_forest(
 
     Parameters
     ----------
-    sorted_mst : SpanningTuple
+    sorted_mst : plscan._spanning_tree.SpanningTree
         A sorted (partial) minimum spanning forest.
     num_points : int
         The number of points in the sorted minimum spanning forest.
@@ -105,6 +205,9 @@ def clusters_from_spanning_forest(
         A single linkage dendrogram of the sorted minimum spanning tree. (order
         matches the input sorted_mst!)
     """
+    if sorted_mst.parent.shape[0] == 0:
+        raise ValueError("Input minimum spanning tree is empty.")
+
     linkage_tree = compute_linkage_tree(
         sorted_mst, num_points, sample_weights=sample_weights
     )
@@ -176,8 +279,8 @@ def knn_to_csr(
     Parameters
     ----------
     distances : np.ndarray[tuple[int, int], np.dtype[np.float32]]
-        A 2D array of distances between points. First column is ignored and
-        should contain self-loop zeros.
+        A 2D array of distances between points. Self-loops are ignored if
+        present.
     indices : np.ndarray[tuple[int, int], np.dtype[np.int64]]
         A 2D array of indices corresponding to the nearest neighbors. The first
         column is ignored and should contain self-loop indices.
@@ -187,14 +290,16 @@ def knn_to_csr(
     graph : scipy.sparse.csr_array
         A sparse distance matrix in CSR format.
     """
-    indices = indices[:, 1:].astype(np.int32)
-    distances = distances[:, 1:].astype(np.float32)
+    indices = indices.astype(np.int32)
+    distances = distances.astype(np.float32)
     num_points, num_neighbors = distances.shape
     indptr = np.arange(num_points + 1, dtype=np.int32) * num_neighbors
-    return csr_array(
+    g = csr_array(
         (distances.reshape(-1), indices.reshape(-1), indptr),
         shape=(num_points, num_points),
     )
+    g.eliminate_zeros()
+    return g
 
 
 def distance_matrix_to_csr(
@@ -251,19 +356,3 @@ def remove_self_loops(graph: csr_array):
     graph[diag, diag] = 0.0
     graph.eliminate_zeros()
     return graph
-
-
-def copy_sparse_graph(graph: SparseGraph):
-    """Creates a new SparseGraph with data and indices copies.
-
-    Parameters
-    ----------
-    graph : SparseGraph
-        The input sparse graph to copy.
-
-    Returns
-    -------
-    new_graph : SparseGraph
-        A new SparseGraph instance with copied data and indices.
-    """
-    return SparseGraph(graph.data.copy(), graph.indices.copy(), graph.indptr)

@@ -21,7 +21,7 @@ struct RowInfo {
 };
 
 struct CondenseState {
-  CondensedTreeView condensed_tree;
+  CondensedTreeWriteView condensed_tree;
   LinkageTreeView const linkage_tree;
   SpanningTreeView const spanning_tree;
   std::vector<uint32_t> parent_of;
@@ -29,10 +29,10 @@ struct CondenseState {
   std::vector<float> pending_distance;
 
   explicit CondenseState(
-      CondensedTreeView condensed_tree, LinkageTreeView const linkage_tree,
+      CondensedTreeWriteView condensed_tree, LinkageTreeView const linkage_tree,
       SpanningTreeView const spanning_tree, size_t const num_points
   )
-      : condensed_tree(condensed_tree),
+      : condensed_tree(std::move(condensed_tree)),
         linkage_tree(linkage_tree),
         spanning_tree(spanning_tree),
         parent_of(num_points - 1u, num_points),
@@ -189,7 +189,7 @@ struct CondenseState {
 };
 
 std::pair<size_t, size_t> process_hierarchy(
-    CondensedTreeView tree, LinkageTreeView const linkage,
+    CondensedTreeWriteView tree, LinkageTreeView const linkage,
     SpanningTreeView const mst, size_t const num_points, float const min_size,
     std::optional<array_ref<float>> const sample_weights
 ) {
@@ -229,12 +229,23 @@ NB_MODULE(_condense_tree, m) {
 
   nb::class_<CondensedTree>(m, "CondensedTree")
       .def(
-          nb::init<
-              array_ref<uint32_t>, array_ref<uint32_t>, array_ref<float>,
-              array_ref<float>, array_ref<uint32_t>>(),
-          nb::arg("parent").noconvert(), nb::arg("child").noconvert(),
-          nb::arg("distance").noconvert(), nb::arg("child_size").noconvert(),
-          nb::arg("cluster_rows").noconvert()
+          "__init__",
+          [](CondensedTree *t, nb::handle parent, nb::handle child,
+             nb::handle distance, nb::handle child_size,
+             nb::handle cluster_rows) {
+            // Support np.memmap and np.ndarray input types for sklearn
+            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            auto const asarray = nb::module_::import_("numpy").attr("asarray");
+            new (t) CondensedTree(
+                nb::cast<array_ref<uint32_t const>>(asarray(parent), false),
+                nb::cast<array_ref<uint32_t const>>(asarray(child), false),
+                nb::cast<array_ref<float const>>(asarray(distance), false),
+                nb::cast<array_ref<float const>>(asarray(child_size), false),
+                nb::cast<array_ref<uint32_t const>>(asarray(cluster_rows), false)
+            );
+          },
+          nb::arg("parent"), nb::arg("child"), nb::arg("distance"),
+          nb::arg("child_size"), nb::arg("cluster_rows")
       )
       .def_ro("parent", &CondensedTree::parent, nb::rv_policy::reference)
       .def_ro("child", &CondensedTree::child, nb::rv_policy::reference)
@@ -253,6 +264,18 @@ NB_MODULE(_condense_tree, m) {
                        self.cluster_rows
             )
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](CondensedTree &self) {
+            return nb::make_tuple(
+                nb::type<CondensedTree>(),
+                nb::make_tuple(
+                    self.parent, self.child, self.distance, self.child_size,
+                    self.cluster_rows
+                )
+            );
           }
       )
       .doc() = R"(

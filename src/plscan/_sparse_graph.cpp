@@ -62,12 +62,14 @@ array_ref<float> extract_core_distances(
 // --- Compute mutual reachability
 
 void apply_core_distances(
-    SparseGraphView graph, std::span<float> const core_distances,
+    SparseGraphWriteView graph, std::span<float> const core_distances,
     std::span<float> data, std::span<int32_t> indices
 ) {
   nb::gil_scoped_release guard{};
+
   std::vector<uint32_t> order(graph.data.size());  // argsort indices
   std::span const order_view(order);
+
   // clang-format off
   #pragma omp parallel for default(none) shared(graph, core_distances, data, indices, order_view)  // clang-format on
   for (int32_t row = 0; row < graph.size(); ++row) {
@@ -103,26 +105,40 @@ void apply_core_distances(
 }
 
 SparseGraph compute_mutual_reachability(
-    SparseGraph const graph, array_ref<float> const core_distances
+    SparseGraph graph, array_ref<float> const core_distances
 ) {
   array_ref<float> const data = new_array<float>(graph.data.size());
   array_ref<int32_t> const indices = new_array<int32_t>(graph.indices.size());
+  auto [graph_view, graph_cap] = SparseGraph::allocate_copy(graph);
   apply_core_distances(
-      graph.view(), to_view(core_distances), to_view(data), to_view(indices)
+      graph_view, to_view(core_distances), to_view(data), to_view(indices)
   );
-  return SparseGraph{data, indices, graph.indptr};
+  return SparseGraph{
+      array_ref<float const>{data}, array_ref<int32_t const>{indices},
+      graph.indptr
+  };
 }
 
-// --- Python bindings
+// --- Module definitions
 
 NB_MODULE(_sparse_graph, m) {
   m.doc() = "Module for representing sparse CSR graph.";
 
   nb::class_<SparseGraph>(m, "SparseGraph")
       .def(
-          nb::init<array_ref<float>, array_ref<int32_t>, array_ref<int32_t>>(),
-          nb::arg("data").noconvert(), nb::arg("indices").noconvert(),
-          nb::arg("indptr").noconvert()
+          "__init__",
+          [](SparseGraph *t, nb::handle data, nb::handle indices,
+             nb::handle indptr) {
+            // Support np.memmap and np.ndarray input types for sklearn
+            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            auto const asarray = nb::module_::import_("numpy").attr("asarray");
+            new (t) SparseGraph(
+                nb::cast<array_ref<float const>>(asarray(data), false),
+                nb::cast<array_ref<int32_t const>>(asarray(indices), false),
+                nb::cast<array_ref<int32_t const>>(asarray(indptr), false)
+            );
+          },
+          nb::arg("data"), nb::arg("indices"), nb::arg("indptr")
       )
       .def_ro("data", &SparseGraph::data, nb::rv_policy::reference)
       .def_ro("indices", &SparseGraph::indices, nb::rv_policy::reference)
@@ -132,6 +148,15 @@ NB_MODULE(_sparse_graph, m) {
           [](SparseGraph const &self) {
             return nb::make_tuple(self.data, self.indices, self.indptr)
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](SparseGraph const &self) {
+            return nb::make_tuple(
+                nb::type<SparseGraph>(),
+                nb::make_tuple(self.data, self.indices, self.indptr)
+            );
           }
       )
       .doc() = R"(

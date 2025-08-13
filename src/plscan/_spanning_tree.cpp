@@ -1,13 +1,15 @@
 #include "_spanning_tree.h"
 
-#include <nanobind/nanobind.h>
-
 #include <algorithm>
 #include <numeric>
 #include <ranges>
 #include <vector>
 
+#include "_distances.h"
+#include "_space_tree.h"
 #include "_sparse_graph.h"
+
+// --- General spanning forest construction helpers
 
 struct Edge {
   int32_t parent = -1;
@@ -15,14 +17,16 @@ struct Edge {
   float distance = std::numeric_limits<float>::infinity();
 };
 
-class SpanningState {
+struct SpanningState {
+ private:
   std::vector<uint32_t> parent;
   std::vector<uint32_t> rank;
-  std::vector<int32_t> remap;
-  std::vector<uint32_t> component;
-  std::vector<Edge> candidates;
 
  public:
+  std::vector<int64_t> remap;      // needs -1 value
+  std::vector<int64_t> component;  // needs -1 value
+  std::vector<Edge> candidates;
+
   explicit SpanningState(size_t const num_points)
       : parent(num_points),
         rank(num_points, 0u),
@@ -33,31 +37,19 @@ class SpanningState {
     std::ranges::copy(parent, component.begin());
   }
 
-  [[nodiscard]] NB_INLINE std::vector<Edge> &candidates_ref() {
-    return candidates;
-  }
-
-  [[nodiscard]] NB_INLINE std::span<Edge const> candidates_view() const {
-    return candidates;
-  }
-
-  [[nodiscard]] NB_INLINE std::span<uint32_t const> component_view() const {
-    return component;
-  }
-
   NB_INLINE void update(size_t const num_components) {
     // Prepare buffers for new iteration
     candidates.resize(num_components);
     std::ranges::fill(candidates, Edge{});
-    std::ranges::fill(remap, -1);
+    std::ranges::fill(remap, -1ll);
 
     // List monotonic component labels per point
-    int32_t counter = 0;
-    for (uint32_t idx = 0; idx < component.size(); ++idx) {
+    int64_t counter = 0;
+    for (size_t idx = 0; idx < component.size(); ++idx) {
       uint32_t const comp = find(idx);
       if (remap[comp] < 0)
         remap[comp] = counter++;
-      component[idx] = static_cast<uint32_t>(remap[comp]);
+      component[idx] = remap[comp];
     }
   }
 
@@ -78,6 +70,25 @@ class SpanningState {
   }
 };
 
+[[nodiscard]] size_t apply_candidates(
+    SpanningTreeWriteView mst, SpanningState &state, size_t &num_edges
+) {
+  size_t const start_count = num_edges;
+  for (auto [parent, child, distance] : state.candidates) {
+    if (child < 0)
+      continue;
+    uint32_t const from = state.find(static_cast<uint32_t>(parent));
+    uint32_t const to = state.find(static_cast<uint32_t>(child));
+    if (from == to)
+      continue;
+    state.link(from, to);
+    mst.parent[num_edges] = static_cast<uint32_t>(parent);
+    mst.child[num_edges] = static_cast<uint32_t>(child);
+    mst.distance[num_edges++] = distance;
+  }
+  return num_edges - start_count;
+}
+
 void combine_vectors(std::vector<Edge> &dest, std::vector<Edge> const &src) {
   for (size_t idx = 0; idx < src.size(); ++idx)
     if (src[idx].distance < dest[idx].distance)
@@ -88,14 +99,16 @@ void combine_vectors(std::vector<Edge> &dest, std::vector<Edge> const &src) {
         merge_edges : std::vector<Edge> : combine_vectors(omp_out, omp_in) \
 ) initializer(omp_priv = omp_orig)
 
-void find_candidates(SpanningState &state, SparseGraphView const graph) {
-  std::vector<Edge> &candidates = state.candidates_ref();
-  std::span<uint32_t const> const component = state.component_view();
+// --- Extract spanning forest from sparse graph
+
+void find_candidates(SpanningState &state, SparseGraphWriteView const graph) {
+  std::vector<Edge> &candidates = state.candidates;
+  std::span<int64_t const> const component = state.component;
 
   // clang-format off
   #pragma omp parallel for default(none) shared(graph, component) reduction(merge_edges : candidates)  // clang-format on
   for (int32_t row = 0; row < graph.size(); ++row) {
-    uint32_t const comp = component[row];
+    int64_t const comp = component[row];
     int32_t const start = graph.indptr[row];
     if (float const distance = graph.data[start];
         distance < candidates[comp].distance)
@@ -103,34 +116,17 @@ void find_candidates(SpanningState &state, SparseGraphView const graph) {
   }
 }
 
-size_t apply_candidates(
-    SpanningTreeView tree, SpanningState &state, size_t &num_edges
+void update_graph(
+    SpanningState const &state, SparseGraphWriteView const graph
 ) {
-  size_t const start_count = num_edges;
-  for (auto [parent, child, distance] : state.candidates_view()) {
-    if (child < 0)
-      continue;
-    uint32_t const from = state.find(static_cast<uint32_t>(parent));
-    uint32_t const to = state.find(static_cast<uint32_t>(child));
-    if (from == to)
-      continue;
-    state.link(from, to);
-    tree.parent[num_edges] = static_cast<uint32_t>(parent);
-    tree.child[num_edges] = static_cast<uint32_t>(child);
-    tree.distance[num_edges++] = distance;
-  }
-  return num_edges - start_count;
-}
-
-void update_graph(SpanningState const &state, SparseGraphView const graph) {
-  std::span<uint32_t const> const component = state.component_view();
+  std::span const component = state.component;
 
   // clang-format off
   #pragma omp parallel for default(none) shared(graph, component)  // clang-format on
   for (int32_t row = 0; row < graph.size(); ++row) {
     int32_t const start = graph.indptr[row];
     int32_t const end = graph.indptr[row + 1];
-    size_t counter = start;
+    int32_t counter = start;
     for (int32_t idx = start; idx < end; ++idx) {
       int32_t const col = graph.indices[idx];
       // Skip if the column index is -1 (indicating no edge)
@@ -149,7 +145,9 @@ void update_graph(SpanningState const &state, SparseGraphView const graph) {
   }
 }
 
-size_t process_graph(SpanningTreeView tree, SparseGraphView const graph) {
+size_t process_graph(
+    SpanningTreeWriteView mst, SparseGraphWriteView const graph
+) {
   nb::gil_scoped_release guard{};
 
   size_t num_edges = 0u;
@@ -158,7 +156,7 @@ size_t process_graph(SpanningTreeView tree, SparseGraphView const graph) {
 
   while (num_components > 1) {
     find_candidates(state, graph);
-    size_t const new_edges = apply_candidates(tree, state, num_edges);
+    size_t const new_edges = apply_candidates(mst, state, num_edges);
     if (new_edges == 0)
       break;
 
@@ -169,22 +167,405 @@ size_t process_graph(SpanningTreeView tree, SparseGraphView const graph) {
   return num_edges;
 }
 
-SpanningTree compute_spanning_forest(SparseGraph graph) {
+SpanningTree extract_spanning_forest(SparseGraph graph) {
   // Build the spanning tree structure
-  auto [tree_view, tree_cap] = SpanningTree::allocate(graph.size() - 1u);
-  size_t num_edges = process_graph(tree_view, graph.view());
-  return {tree_view, std::move(tree_cap), num_edges};
+  auto [mst_view, mst_cap] = SpanningTree::allocate(graph.size() - 1u);
+  auto [graph_view, graph_cap] = SparseGraph::allocate_copy(graph);
+  size_t num_edges = process_graph(mst_view, graph_view);
+  return {mst_view, std::move(mst_cap), num_edges};
 }
+
+// --- Spanning forest from general space tree helpers
+
+struct TraversalState {
+  std::vector<int64_t> node_component;
+  std::vector<float> component_nn_dist;
+  std::vector<float> candidate_dist;
+  std::vector<int32_t> candidate_idx;
+
+  explicit TraversalState(SpaceTreeView const tree)
+      : node_component(tree.node_data.size(), -1ll),
+        component_nn_dist(tree.data.shape(0)),
+        candidate_dist(tree.data.shape(0)),
+        candidate_idx(tree.data.shape(0)) {}
+
+  NB_INLINE void update(
+      SpanningState const &state, SpaceTreeView const tree,
+      size_t const num_components
+  ) {
+    component_nn_dist.resize(num_components);
+    std::ranges::fill(
+        component_nn_dist, std::numeric_limits<float>::infinity()
+    );
+    std::ranges::fill(candidate_dist, std::numeric_limits<float>::infinity());
+    std::ranges::fill(candidate_idx, -1);
+
+    size_t const num_nodes = node_component.size();
+    std::span const component = state.component;
+    for (size_t _i = 1; _i <= num_nodes; ++_i) {
+      size_t const idx = num_nodes - _i;
+      if (auto const &[idx_start, idx_end, is_leaf, _] = tree.node_data[idx];
+          is_leaf) {
+        bool flag = true;
+        int64_t const candidate_comp = component[tree.idx_array[idx_start]];
+        for (int64_t _j = idx_start + 1; _j < idx_end; ++_j)
+          if (component[tree.idx_array[_j]] != candidate_comp) {
+            flag = false;
+            break;
+          }
+
+        if (flag)
+          node_component[idx] = candidate_comp;
+      } else if (auto const left = idx * 2 + 1;
+                 node_component[left] == node_component[left + 1])
+        node_component[idx] = node_component[left];
+    }
+  }
+};
+
+template <typename rdist_fun_t, typename min_rdist_fun_t>
+class RowQueryState {
+  SpaceTreeView const tree;
+  std::span<float const> const core_distances;
+  std::span<int64_t const> const point_component;
+  std::span<int64_t const> const node_component;
+
+  std::span<float const> const point;
+  float const current_core_dist;
+  int64_t const current_component;
+  float &component_nn_dist;  // per thread best distance for the component
+  float &candidate_dist;     // per point best distance
+  int32_t &candidate_idx;    // per point best index
+
+  rdist_fun_t const rdist_fun;
+  min_rdist_fun_t const min_rdist_fun;
+
+ public:
+  RowQueryState(
+      SpanningState const &state, TraversalState &traversal_state,
+      SpaceTreeView const tree, std::span<float> const core_distances,
+      rdist_fun_t rdist_fun, min_rdist_fun_t min_rdist_fun,
+      int64_t const point_idx
+  )
+      : tree(tree),
+        core_distances(core_distances),
+        point_component(state.component),
+        node_component(traversal_state.node_component),
+        point(&tree.data(point_idx, 0), tree.data.shape(1)),
+        current_core_dist(core_distances[point_idx]),
+        current_component(state.component[point_idx]),
+        component_nn_dist(traversal_state.component_nn_dist[current_component]),
+        candidate_dist(traversal_state.candidate_dist[point_idx]),
+        candidate_idx(traversal_state.candidate_idx[point_idx]),
+        rdist_fun(std::move(rdist_fun)),
+        min_rdist_fun(std::move(min_rdist_fun)) {}
+
+  void perform_query() {
+    constexpr size_t node_idx = 0ull;
+    float const lower_bound = min_rdist_fun(tree, point, node_idx);
+    recursive_query(lower_bound, node_idx);
+  }
+
+ private:
+  void recursive_query(float const lower_bound, size_t const node_idx) {
+    // Cannot improve downstream this node (wrap in read-lock)
+    if (lower_bound > std::min(candidate_dist, component_nn_dist) or
+        current_core_dist > component_nn_dist or
+        node_component[node_idx] == current_component)
+      return;
+
+    if (auto const &[idx_start, idx_end, is_leaf, _] = tree.node_data[node_idx];
+        is_leaf)
+      process_leaf(idx_start, idx_end);
+    else
+      traverse_node(node_idx);
+  }
+
+  void process_leaf(int64_t const idx_start, int64_t const idx_end) const {
+    for (int64_t _i = idx_start; _i < idx_end; ++_i) {
+      int64_t const idx = tree.idx_array[_i];
+
+      // Skip if the point is already in the component or does not improve
+      // on the best found so far (per-thread)
+      if (point_component[idx] == current_component or
+          core_distances[idx] >= component_nn_dist)
+        continue;
+
+      // Compute the mutual reachability distance
+      float const dist = std::max(
+          {rdist_fun(point, {&tree.data(idx, 0), tree.data.shape(1)}),
+           current_core_dist, core_distances[idx]}
+      );
+
+      // Update the candidate distance and index
+      if (dist < candidate_dist) {
+        candidate_dist = dist;
+        candidate_idx = static_cast<int32_t>(idx);
+        // Update the component nearest neighbor distance. This can be a
+        // data-race! Adding locks introduces more costs than working with
+        // potentially non-optimal component_nn_dists. The data race does not
+        // influence correctness, only the level of pruning in the traversal.
+        if (dist < component_nn_dist)
+          component_nn_dist = dist;
+      }
+    }
+  }
+
+  void traverse_node(size_t const node_idx) {
+    size_t left = node_idx * 2 + 1;
+    size_t right = left + 1;
+
+    float left_lower_bound = min_rdist_fun(tree, point, left);
+    float right_lower_bound = min_rdist_fun(tree, point, right);
+    if (left_lower_bound > right_lower_bound) {
+      std::swap(left, right);
+      std::swap(left_lower_bound, right_lower_bound);
+    }
+
+    recursive_query(left_lower_bound, left);
+    recursive_query(right_lower_bound, right);
+  }
+};
+
+size_t initialize_mst_from_knn(
+    SpanningTreeWriteView mst, SpanningState &state, SparseGraphView const knn,
+    std::span<float> const core_distances, size_t &num_edges
+) {
+  std::vector<Edge> &candidates = state.candidates;
+  // clang-format off
+  #pragma omp parallel for default(none) shared(knn, core_distances, candidates)  // clang-format on
+  for (int32_t row = 0; row < knn.size(); ++row)
+    for (int32_t idx = knn.indptr[row]; idx < knn.indptr[row + 1]; ++idx)
+      if (int32_t const col = knn.indices[idx];
+          core_distances[row] >= core_distances[col])
+        candidates[row] = Edge{row, col, core_distances[row]};
+
+  return apply_candidates(mst, state, num_edges);
+}
+
+template <typename rdist_fun_t, typename min_rdist_fun_t>
+void component_aware_query(
+    SpanningState const &state, TraversalState &traversal_state,
+    SpaceTreeView const tree, std::span<float> const core_distances,
+    rdist_fun_t rdist_fun, min_rdist_fun_t min_rdist_fun
+) {
+  // clang-format off
+  #pragma omp parallel for default(none) shared(state, traversal_state, core_distances, tree, rdist_fun, min_rdist_fun)  // clang-format on
+  for (int64_t point_idx = 0; point_idx < tree.data.shape(0); ++point_idx) {
+    RowQueryState query_state{state,          traversal_state, tree,
+                              core_distances, rdist_fun,       min_rdist_fun,
+                              point_idx};
+    query_state.perform_query();
+  }
+}
+
+void find_candidates(
+    SpanningState &state, TraversalState const &traversal_state
+) {
+  std::vector<Edge> &candidates = state.candidates;
+  std::span<int64_t const> const component = state.component;
+  std::span const edge_dist = traversal_state.candidate_dist;
+  std::span const edge_idx = traversal_state.candidate_idx;
+
+  // clang-format off
+  #pragma omp parallel for default(none) shared(edge_dist, edge_idx, component) reduction(merge_edges : candidates)  // clang-format on
+  for (int32_t row = 0; row < edge_dist.size(); ++row) {
+    int64_t const comp = component[row];
+    if (float const distance = edge_dist[row];
+        distance < candidates[comp].distance)
+      candidates[comp] = Edge{row, edge_idx[row], distance};
+  }
+}
+
+template <
+    typename rdist_fun_t, typename min_rdist_fun_t, typename to_dist_fun_t>
+size_t space_tree_boruvka(
+    SpanningTreeWriteView mst, SpaceTreeView const tree,
+    SparseGraphView const knn, std::span<float> const core_distances,
+    rdist_fun_t &&rdist_fun, min_rdist_fun_t &&min_rdist_fun,
+    to_dist_fun_t &&to_dist_fun
+) {
+  nb::gil_scoped_release guard{};
+
+  size_t num_edges = 0u;
+  size_t num_components = knn.size();
+  SpanningState state(num_components);
+  TraversalState traversal_state(tree);
+  size_t new_edges = initialize_mst_from_knn(
+      mst, state, knn, core_distances, num_edges
+  );
+
+  while (true) {
+    num_components -= new_edges;
+    if (num_components == 1)
+      break;
+
+    state.update(num_components);
+    traversal_state.update(state, tree, num_components);
+
+    component_aware_query<rdist_fun_t, min_rdist_fun_t>(
+        state, traversal_state, tree, core_distances, rdist_fun, min_rdist_fun
+    );
+    find_candidates(state, traversal_state);
+    new_edges = apply_candidates(mst, state, num_edges);
+    if (new_edges == 0)
+      break;
+  }
+
+  // Convert the distances to the final form, the compiler optimizes this
+  // away entirely if the to_dist_fun is a no-op!
+  for (float &dist_val : core_distances)
+    dist_val = to_dist_fun(dist_val);
+  for (size_t idx = 0; idx < num_edges; ++idx)
+    mst.distance[idx] = to_dist_fun(mst.distance[idx]);
+
+  return num_edges;
+}
+
+// --- Spanning forest from kdtree
+
+SpanningTree compute_spanning_tree_kdtree(
+    SpaceTree const tree, SparseGraph const knn,
+    array_ref<float> const core_distances, char const *const metric,
+    nb::dict const metric_kws
+) {
+  // Build the spanning tree structure
+  size_t num_edges = 0ull;
+
+  // OpenMP does not yet support capturing from structured bindings.
+  auto result = SpanningTree::allocate(knn.size() - 1u);
+  SpanningTreeWriteView mst_view = result.first;
+  SpanningTreeCapsule mst_cap = std::move(result.second);
+
+  // Avoid code duplication by defining a parameterless templated function
+  auto run = [metric_kws, mst_view, tree = tree.view(), knn = knn.view(),
+              core_distances = to_view(core_distances)]<Metric metric>() {
+    return space_tree_boruvka(
+        mst_view, tree, knn, core_distances, get_rdist<metric>(metric_kws),
+        get_kdtree_min_rdist<metric>(metric_kws),
+        get_rdist_to_dist<metric>(metric_kws)
+    );
+  };
+
+  // Select the appropriate metric and run the spanning tree algorithm
+  switch (parse_metric(metric)) {
+    case Metric::Euclidean:
+      num_edges = run.operator()<Metric::Euclidean>();
+      break;
+    case Metric::Cityblock:
+      num_edges = run.operator()<Metric::Cityblock>();
+      break;
+    case Metric::Chebyshev:
+      num_edges = run.operator()<Metric::Chebyshev>();
+      break;
+    case Metric::Minkowski:
+      num_edges = run.operator()<Metric::Minkowski>();
+      break;
+    default:
+      throw std::invalid_argument("Unsupported metric for KDTrees");
+  }
+  return {mst_view, std::move(mst_cap), num_edges};
+}
+
+// --- Spanning forest from balltree
+
+SpanningTree compute_spanning_tree_balltree(
+    SpaceTree const tree, SparseGraph const knn,
+    array_ref<float> const core_distances, char const *const metric,
+    nb::dict const metric_kws
+) {
+  // Build the spanning tree structure
+  size_t num_edges = 0ull;
+
+  // OpenMP does not yet support capturing from structured bindings.
+  auto result = SpanningTree::allocate(knn.size() - 1u);
+  SpanningTreeWriteView mst_view = result.first;
+  SpanningTreeCapsule mst_cap = std::move(result.second);
+
+  // Avoid code duplication by defining a parameterless templated function
+  auto run = [metric_kws, mst_view, tree = tree.view(), knn = knn.view(),
+              core_distances = to_view(core_distances)]<Metric metric>() {
+    return space_tree_boruvka(
+        mst_view, tree, knn, core_distances, get_rdist<metric>(metric_kws),
+        get_balltree_min_rdist<metric>(metric_kws),
+        get_rdist_to_dist<metric>(metric_kws)
+    );
+  };
+
+  // Select the appropriate metric and run the spanning tree algorithm
+  switch (parse_metric(metric)) {
+    case Metric::Euclidean:
+      num_edges = run.operator()<Metric::Euclidean>();
+      break;
+    case Metric::Cityblock:
+      num_edges = run.operator()<Metric::Cityblock>();
+      break;
+    case Metric::Chebyshev:
+      num_edges = run.operator()<Metric::Chebyshev>();
+      break;
+    case Metric::Minkowski:
+      num_edges = run.operator()<Metric::Minkowski>();
+      break;
+    case Metric::Hamming:
+      num_edges = run.operator()<Metric::Hamming>();
+      break;
+    case Metric::Braycurtis:
+      num_edges = run.operator()<Metric::Braycurtis>();
+      break;
+    case Metric::Canberra:
+      num_edges = run.operator()<Metric::Canberra>();
+      break;
+    case Metric::Haversine:
+      num_edges = run.operator()<Metric::Haversine>();
+      break;
+    case Metric::SEuclidean:
+      num_edges = run.operator()<Metric::SEuclidean>();
+      break;
+    case Metric::Mahalanobis:
+      num_edges = run.operator()<Metric::Mahalanobis>();
+      break;
+    case Metric::Dice:
+      num_edges = run.operator()<Metric::Dice>();
+      break;
+    case Metric::Jaccard:
+      num_edges = run.operator()<Metric::Jaccard>();
+      break;
+    case Metric::Russellrao:
+      num_edges = run.operator()<Metric::Russellrao>();
+      break;
+    case Metric::Rogerstanimoto:
+      num_edges = run.operator()<Metric::Rogerstanimoto>();
+      break;
+    case Metric::Sokalsneath:
+      num_edges = run.operator()<Metric::Sokalsneath>();
+      break;
+    default:
+      throw std::invalid_argument("Unsupported metric for BallTrees");
+  }
+
+  return {mst_view, std::move(mst_cap), num_edges};
+}
+
+// --- Module definitions
 
 NB_MODULE(_spanning_tree, m) {
   m.doc() = "Module for spanning tree computation in PLSCAN.";
 
   nb::class_<SpanningTree>(m, "SpanningTree")
       .def(
-          nb::init<array_ref<uint32_t>, array_ref<uint32_t>, array_ref<float>>(
-          ),
-          nb::arg("parent").noconvert(), nb::arg("child").noconvert(),
-          nb::arg("distance").noconvert()
+          "__init__",
+          [](SpanningTree *t, nb::handle parent, nb::handle child,
+             nb::handle distance) {
+            // Support np.memmap and np.ndarray input types for sklearn
+            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            auto const asarray = nb::module_::import_("numpy").attr("asarray");
+            new (t) SpanningTree(
+                nb::cast<array_ref<uint32_t const>>(asarray(parent), false),
+                nb::cast<array_ref<uint32_t const>>(asarray(child), false),
+                nb::cast<array_ref<float const>>(asarray(distance), false)
+            );
+          },
+          nb::arg("parent"), nb::arg("child"), nb::arg("distance")
       )
       .def_ro("parent", &SpanningTree::parent, nb::rv_policy::reference)
       .def_ro("child", &SpanningTree::child, nb::rv_policy::reference)
@@ -194,6 +575,15 @@ NB_MODULE(_spanning_tree, m) {
           [](SpanningTree const &self) {
             return nb::make_tuple(self.parent, self.child, self.distance)
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](SpanningTree const &self) {
+            return nb::make_tuple(
+                nb::type<SpanningTree>(),
+                nb::make_tuple(self.parent, self.child, self.distance)
+            );
           }
       )
       .doc() = R"(
@@ -210,19 +600,85 @@ NB_MODULE(_spanning_tree, m) {
       )";
 
   m.def(
-      "compute_spanning_forest", &compute_spanning_forest, nb::arg("graph"),
+      "extract_spanning_forest", &extract_spanning_forest, nb::arg("graph"),
       R"(
-            Computes a minimum spanning forest from a sparse graph.
+        Extracts a minimum spanning forest from a sparse graph.
 
-            Parameters
-            ----------
-            graph : plscan._sparse_graph.SparseGraph
-                The input sparse graph.
+        Parameters
+        ----------
+        graph : plscan._sparse_graph.SparseGraph
+            The input sparse graph.
 
-            Returns
-            -------
-            plscan._spanning_tree.SpanningTree
-                The computed spanning forest.
+        Returns
+        -------
+        plscan._spanning_tree.SpanningTree
+            The computed spanning forest.
+        )"
+  );
+
+  m.def(
+      "compute_spanning_tree_kdtree", &compute_spanning_tree_kdtree,
+      nb::arg("tree"), nb::arg("knn"), nb::arg("core_distances"),
+      nb::arg("metric") = "euclidean", nb::arg("metric_kws") = nb::dict(),
+      R"(
+        Computes a minimum spanning tree (MST) using a k-d tree.
+
+        Parameters
+        ----------
+        tree : plscan._space_tree.SpaceTree
+            The kdtree structure.
+        knn : plscan._sparse_graph.SparseGraph
+            The k-nearest neighbors graph.
+        core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
+            The core distances for each point.
+        metric : str, optional
+            The distance metric to use (default is "euclidean"). Supported
+            metrics are:
+                "euclidean", "l2",
+                "manhattan", "cityblock", "l1",
+                "chebyshev", "infinity",
+                "minkowski", "p".
+        metric_kws : dict, optional
+            Additional keyword arguments for the distance function, such as
+            the Minkowski distance parameter `p` for the "minkowski" metric.
+
+        Returns
+        -------
+        plscan._spanning_tree.SpanningTree
+            The computed minimum spanning tree.
+        )"
+  );
+
+  m.def(
+      "compute_spanning_tree_balltree", &compute_spanning_tree_balltree,
+      nb::arg("tree"), nb::arg("knn"), nb::arg("core_distances"),
+      nb::arg("metric") = "euclidean", nb::arg("metric_kws") = nb::dict(),
+      R"(
+        Computes a minimum spanning tree (MST) using a ball tree.
+
+        Parameters
+        ----------
+        tree : plscan._space_tree.SpaceTree
+            The balltree structure.
+        knn : plscan._sparse_graph.SparseGraph
+            The k-nearest neighbors graph.
+        core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
+            The core distances for each point.
+        metric : str, optional
+            The distance metric to use (default is "euclidean"). Supported
+            metrics are:
+                "euclidean", "l2",
+                "manhattan", "cityblock", "l1",
+                "chebyshev", "infinity",
+                "minkowski", "p".
+        metric_kws : dict, optional
+            Additional keyword arguments for the distance function, such as
+            the Minkowski distance parameter `p` for the "minkowski" metric.
+
+        Returns
+        -------
+        plscan._spanning_tree.SpanningTree
+            The computed minimum spanning tree.
         )"
   );
 }

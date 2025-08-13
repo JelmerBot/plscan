@@ -3,16 +3,33 @@ import numpy as np
 from scipy import sparse as sp
 from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors._kd_tree import KDTree32
+from sklearn.neighbors._ball_tree import BallTree32
 from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import make_blobs
 from sklearn.utils import shuffle
 
+from plscan import PLSCAN
 from plscan.api import (
     set_num_threads,
     get_max_threads,
     distance_matrix_to_csr,
     knn_to_csr,
 )
+
+# used to select which input the algorithm should use (X or X_bool)
+boolean_metrics = {
+    "hamming",
+    "dice",
+    "jaccard",
+    "russellrao",
+    "rogerstanimoto",
+    "sokalsneath",
+}
+# used to avoid duplicate tests where possible
+duplicate_metrics = {"p", "infinity", "manhattan", "l1", "l2"}
+# used to select which input the algorithm should use (X or X_bool)
+numerical_balltree_metrics = set(PLSCAN.valid_balltree_metrics) - boolean_metrics
 
 
 def pytest_sessionstart(session):
@@ -28,7 +45,14 @@ def X():
     X, y = make_blobs(n_samples=200, random_state=10)
     X, y = shuffle(X, y, random_state=7)
     X = StandardScaler().fit_transform(X)
-    return X
+    return X.astype(np.float32)
+
+
+@pytest.fixture(scope="session")
+def X_bool():
+    p = 0.25
+    rng = np.random.Generator(np.random.PCG64(10))
+    return rng.choice(a=[True, False], size=(200, 100), p=[p, 1 - p]).astype(np.float32)
 
 
 @pytest.fixture(scope="session")
@@ -50,10 +74,16 @@ def knn(X):
 
 
 @pytest.fixture(scope="session")
-def g_knn(X):
-    return knn_to_csr(
-        *NearestNeighbors(n_neighbors=8).fit(X).kneighbors(X, return_distance=True)
-    )
+def knn_no_loops(X):
+    knn = NearestNeighbors(n_neighbors=8).fit(X).kneighbors()
+    knn[0][0:5, -1] = np.inf
+    knn[1][0:5, -1] = -1
+    return knn
+
+
+@pytest.fixture(scope="session")
+def g_knn(knn):
+    return knn_to_csr(*knn)
 
 
 @pytest.fixture(scope="session")
@@ -70,3 +100,13 @@ def mst(g_dists):
     out[:, 1] = mst.col[order]
     out[:, 2] = mst.data[order]
     return out
+
+
+@pytest.fixture(scope="session")
+def kdtree(X):
+    return KDTree32(X)
+
+
+@pytest.fixture(scope="session")
+def balltree(X):
+    return BallTree32(X)

@@ -1,0 +1,481 @@
+#include "_space_tree.h"
+
+#include <nanobind/stl/vector.h>
+
+#include <functional>
+
+#include "_distances.h"
+#include "_sparse_graph.h"
+
+// --- General space tree query
+
+template <typename rdist_fun_t, typename min_rdist_fun_t>
+class RowQueryState {
+  SpaceTreeView const tree;
+  std::span<float const> const point;
+  std::span<float> const row_dists;
+  std::span<int32_t> const row_indices;
+  rdist_fun_t rdist_fun;
+  min_rdist_fun_t min_rdist_fun;
+
+ public:
+  RowQueryState(
+      SparseGraphWriteView const knn, SpaceTreeView const tree,
+      rdist_fun_t rdist_fun, min_rdist_fun_t min_rdist_fun,
+      int64_t const point_idx
+  )
+      : tree(tree),
+        point(row_view(tree.data, point_idx)),
+        row_dists(knn.data.subspan(
+            knn.indptr[point_idx],
+            knn.indptr[point_idx + 1] - knn.indptr[point_idx]
+        )),
+        row_indices(knn.indices.subspan(
+            knn.indptr[point_idx],
+            knn.indptr[point_idx + 1] - knn.indptr[point_idx]
+        )),
+        rdist_fun(std::move(rdist_fun)),
+        min_rdist_fun(std::move(min_rdist_fun)) {}
+
+  void perform_query() const {
+    constexpr size_t node_idx = 0ul;
+    float const lower_bound = min_rdist_fun(tree, point, node_idx);
+    recursive_query(lower_bound, node_idx);
+    deheap_sort();
+  }
+
+ private:
+  void recursive_query(float const lower_bound, size_t const node_idx) const {
+    if (lower_bound > row_dists[0])
+      return;
+
+    if (auto const &[idx_start, idx_end, is_leaf, _] = tree.node_data[node_idx];
+        is_leaf)
+      process_leaf(idx_start, idx_end);
+    else
+      traverse_node(node_idx);
+  }
+
+  void process_leaf(int64_t const idx_start, int64_t const idx_end) const {
+    for (int64_t _i = idx_start; _i < idx_end; ++_i) {
+      int64_t const idx = tree.idx_array[_i];
+      if (float const dist = rdist_fun(point, row_view(tree.data, idx));
+          dist < row_dists[0])
+        heap_push(dist, static_cast<int32_t>(idx));
+    }
+  }
+
+  void traverse_node(size_t const node_idx) const {
+    size_t left = node_idx * 2 + 1;
+    size_t right = left + 1;
+
+    float left_lower_bound = min_rdist_fun(tree, point, left);
+    float right_lower_bound = min_rdist_fun(tree, point, right);
+    if (left_lower_bound > right_lower_bound) {
+      std::swap(left, right);
+      std::swap(left_lower_bound, right_lower_bound);
+    }
+
+    recursive_query(left_lower_bound, left);
+    recursive_query(right_lower_bound, right);
+  }
+
+  void heap_push(float const dist, int32_t const neighbor) const {
+    size_t idx = 0ul;
+    size_t const num_neighbors = row_dists.size();
+
+    // Replace the largest value at index 0 with the next largest.
+    // stop at the to-be-inserted distance value!
+    while (true) {
+      size_t left = idx * 2 + 1;
+      if (left >= num_neighbors)
+        break;
+
+      // Find the largest distance child
+      size_t right = left + 1;
+      float left_dist = row_dists[left];
+      if (float right_dist = right >= num_neighbors ? 0.0f : row_dists[right];
+          left_dist <= right_dist) {
+        std::swap(left, right);
+        std::swap(left_dist, right_dist);
+      }
+
+      // Shift values if child is larger than the new distance
+      if (left_dist <= dist)
+        break;
+      row_dists[idx] = row_dists[left];
+      row_indices[idx] = row_indices[left];
+      idx = left;
+    }
+
+    // Place the new distance and index at the current position
+    row_dists[idx] = dist;
+    row_indices[idx] = neighbor;
+  }
+
+  void deheap_sort() const {
+    size_t const num_neighbors = row_dists.size();
+    for (size_t _i = 1ul; _i <= num_neighbors; ++_i) {
+      size_t const idx = num_neighbors - _i;
+      std::swap(row_dists[0], row_dists[idx]);
+      std::swap(row_indices[0], row_indices[idx]);
+      siftdown(idx);
+    }
+  }
+
+  void siftdown(size_t const idx) const {
+    std::span<float> sub_dists = row_dists.subspan(0, idx);
+    std::span<int32_t> sub_indices = row_indices.subspan(0, idx);
+
+    size_t element = 0ul;
+    while (element * 2 + 1 < sub_dists.size()) {
+      size_t const left = element * 2 + 1;
+      size_t const right = left + 1;
+      size_t largest = element;
+
+      if (sub_dists[largest] < sub_dists[left])
+        largest = left;
+
+      if (right < sub_dists.size() and sub_dists[largest] < sub_dists[right])
+        largest = right;
+
+      if (largest == element)
+        break;
+
+      std::swap(sub_dists[element], sub_dists[largest]);
+      std::swap(sub_indices[element], sub_indices[largest]);
+      element = largest;
+    }
+  }
+};
+
+template <typename rdist_fun_t, typename min_rdist_fun_t>
+void parallel_query(
+    SparseGraphWriteView const knn, SpaceTreeView const tree,
+    rdist_fun_t &&rdist_fun, min_rdist_fun_t &&min_rdist_fun
+) {
+  nb::gil_scoped_release guard{};
+  // clang-format off
+  #pragma omp parallel for default(none) shared(knn, tree, rdist_fun, min_rdist_fun)  // clang-format on
+  for (int64_t point_idx = 0; point_idx < tree.data.shape(0); ++point_idx) {
+    RowQueryState state{knn, tree, rdist_fun, min_rdist_fun, point_idx};
+    state.perform_query();
+  }
+}
+
+// --- KDTree specific query
+
+SparseGraph kdtree_query(
+    SpaceTree const tree, uint32_t const num_neighbors,
+    char const *const metric, nb::dict const metric_kws
+) {
+  // OpenMP does not yet support capturing from structured bindings.
+  std::pair result = SparseGraph::allocate_knn(
+      tree.data.shape(0), num_neighbors
+  );
+  SparseGraphWriteView knn_view = result.first;
+  SparseGraphCapsule knn_cap = std::move(result.second);
+
+  // Avoid code duplication by defining a parameterless templated function
+  auto run = [metric_kws, knn_view, tree = tree.view()]<Metric metric>() {
+    return parallel_query(
+        knn_view, tree, get_rdist<metric>(metric_kws),
+        get_kdtree_min_rdist<metric>(metric_kws)
+    );
+  };
+
+  // Select the appropriate metric and run the query
+  switch (parse_metric(metric)) {
+    case Metric::Euclidean:
+      run.operator()<Metric::Euclidean>();
+      break;
+    case Metric::Cityblock:
+      run.operator()<Metric::Cityblock>();
+      break;
+    case Metric::Chebyshev:
+      run.operator()<Metric::Chebyshev>();
+      break;
+    case Metric::Minkowski:
+      run.operator()<Metric::Minkowski>();
+      break;
+    default:
+      throw std::invalid_argument(
+          "Unsupported metric for KDTree query: " + std::string(metric)
+      );
+  }
+  return {knn_view, knn_cap};
+}
+
+// --- Ball specific query
+
+SparseGraph balltree_query(
+    SpaceTree const tree, uint32_t const num_neighbors,
+    char const *const metric, nb::dict const metric_kws
+) {
+  // OpenMP does not yet support capturing from structured bindings.
+  auto result = SparseGraph::allocate_knn(tree.data.shape(0), num_neighbors);
+  SparseGraphWriteView knn_view = result.first;
+  SparseGraphCapsule knn_cap = std::move(result.second);
+
+  // Avoid code duplication by defining a parameterless templated function
+  auto run = [metric_kws, knn_view, tree = tree.view()]<Metric metric>() {
+    return parallel_query(
+        knn_view, tree, get_rdist<metric>(metric_kws),
+        get_balltree_min_rdist<metric>(metric_kws)
+    );
+  };
+
+  // Select the appropriate metric and run the query
+  switch (parse_metric(metric)) {
+    case Metric::Euclidean:
+      run.operator()<Metric::Euclidean>();
+      break;
+    case Metric::Cityblock:
+      run.operator()<Metric::Cityblock>();
+      break;
+    case Metric::Chebyshev:
+      run.operator()<Metric::Chebyshev>();
+      break;
+    case Metric::Minkowski:
+      run.operator()<Metric::Minkowski>();
+      break;
+    case Metric::Hamming:
+      run.operator()<Metric::Hamming>();
+      break;
+    case Metric::Braycurtis:
+      run.operator()<Metric::Braycurtis>();
+      break;
+    case Metric::Canberra:
+      run.operator()<Metric::Canberra>();
+      break;
+    case Metric::Haversine:
+      run.operator()<Metric::Haversine>();
+      break;
+    case Metric::SEuclidean:
+      run.operator()<Metric::SEuclidean>();
+      break;
+    case Metric::Mahalanobis:
+      run.operator()<Metric::Mahalanobis>();
+      break;
+    case Metric::Dice:
+      run.operator()<Metric::Dice>();
+      break;
+    case Metric::Jaccard:
+      run.operator()<Metric::Jaccard>();
+      break;
+    case Metric::Russellrao:
+      run.operator()<Metric::Russellrao>();
+      break;
+    case Metric::Rogerstanimoto:
+      run.operator()<Metric::Rogerstanimoto>();
+      break;
+    case Metric::Sokalsneath:
+      run.operator()<Metric::Sokalsneath>();
+      break;
+    default:
+      throw std::invalid_argument(
+          "Unsupported metric for Balltree query: " + std::string(metric)
+      );
+  }
+  return {knn_view, knn_cap};
+}
+
+// --- Test for space tree python to c++ translation
+
+std::vector<NodeData> check_node_data(array_ref<double const> const node_data) {
+  auto range = convert_node_data(node_data);
+  return {range.begin(), range.end()};
+}
+
+// --- Module definitions
+
+NB_MODULE(_space_tree, m) {
+  m.doc() = "Module for space tree computations in PLSCAN.";
+
+  nb::class_<NodeData>(m, "NodeData")
+      .def(
+          nb::init<int64_t, int64_t, int64_t, double>(), nb::arg("idx_start"),
+          nb::arg("idx_end"), nb::arg("is_leaf"), nb::arg("radius")
+      )
+      .def_ro("idx_start", &NodeData::idx_start)
+      .def_ro("idx_end", &NodeData::idx_end)
+      .def_ro("is_leaf", &NodeData::is_leaf)
+      .def_ro("radius", &NodeData::radius)
+      .def(
+          "__iter__",
+          [](NodeData const &self) {
+            return nb::make_tuple(
+                       self.idx_start, self.idx_end, self.is_leaf, self.radius
+            )
+                .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](NodeData const &self) {
+            return nb::make_tuple(
+                nb::type<NodeData>(),
+                nb::make_tuple(
+                    self.idx_start, self.idx_end, self.is_leaf, self.radius
+                )
+            );
+          }
+      )
+      .doc() = R"(
+        NodeData represents nodes in sklearn KDTrees and BallTrees.
+
+        Parameters
+        ----------
+        idx_start : int64
+            The starting index of the node in the tree.
+        idx_end : int64
+            The ending index of the node in the tree.
+        is_leaf : int64
+            A flag indicating whether the node is a leaf (1) or not (0).
+        radius : float64
+            The radius of the node, used in BallTrees to define the
+            hypersphere that contains the points in the node.
+      )";
+
+  nb::class_<SpaceTree>(m, "SpaceTree")
+      .def(
+          nb::init<
+              ndarray_ref<float const, 2>, array_ref<int64_t const>,
+              array_ref<double const>, ndarray_ref<float const, 3>>(),
+          nb::arg("data").noconvert(), nb::arg("idx_array").noconvert(),
+          nb::arg("node_data").noconvert(), nb::arg("node_bounds").noconvert()
+      )
+      .def_ro("data", &SpaceTree::data, nb::rv_policy::reference)
+      .def_ro("idx_array", &SpaceTree::idx_array, nb::rv_policy::reference)
+      .def_ro("node_data", &SpaceTree::node_data, nb::rv_policy::reference)
+      .def_ro("node_bounds", &SpaceTree::node_bounds, nb::rv_policy::reference)
+      .def(
+          "__iter__",
+          [](SpaceTree const &self) {
+            return nb::make_tuple(
+                       self.data, self.idx_array, self.node_data,
+                       self.node_bounds
+            )
+                .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](SpaceTree const &self) {
+            return nb::make_tuple(
+                nb::type<SpaceTree>(),
+                nb::make_tuple(
+                    self.data, self.idx_array, self.node_data, self.node_bounds
+                )
+            );
+          }
+      )
+      .doc() = R"(
+        SpaceTree represents sklearn KDTrees and BallTrees.
+
+        Parameters
+        ----------
+        data : numpy.ndarray[tuple[int, int], np.dtype[np.float32]]
+            The data feature vectors.
+        idx_array : numpy.ndarray[tuple[int], np.dtype[np.int64]]
+            The tree's index array, mapping each points to tree nodes (?).
+        node_data : numpy.ndarray[tuple[int], np.dtype[np.float64]]
+            A float64 view into the structured NodeData array. Each four
+            consecutive values represent a node's data:
+              int64 idx_start,
+              int64 idx_end,
+              int64 is_leaf,
+              float64 radius.
+        node_bounds : numpy.ndarray[tuple[int, int, int], np.dtype[np.float32]]
+            The node bounds, a 3D array with shape (x, num_nodes, num_features),
+            representing the min and max bounds of each node in the feature
+            space.
+      )";
+
+  m.def(
+      "check_node_data", &check_node_data, nb::arg("node_data").noconvert(),
+      R"(
+        Converts float64 node_data view to a list of NodeData objects.
+        This function is used in tests to check whether the node data
+        conversion works correctly!
+
+        Parameters
+        ----------
+        node_data : numpy.ndarray[tuple[int], np.dtype[np.float64]]
+            A flat float64 array view containing node data in the format:
+              int64 idx_start,
+              int64 idx_end,
+              int64 is_leaf,
+              float 64 radius.
+
+        Returns
+        -------
+        List[NodeData]
+            A list of NodeData objects created from the input array.
+      )"
+  );
+
+  m.def(
+      "kdtree_query", &kdtree_query, nb::arg("tree"),
+      nb::arg("num_neighbors") = 5u, nb::arg("metric") = "euclidean",
+      nb::arg("metric_kws") = nb::dict(),
+      R"(
+        Performs a k-nearest neighbors query on a SpaceTree.
+
+        Parameters
+        ----------
+        tree : plscan._space_tree.SpaceTree
+            The SpaceTree to query (must be a KDTree!).
+        num_neighbors : int, optional
+            The number of nearest neighbors to find (default is 5).
+        metric : str, optional
+            The distance metric to use (default is "euclidean"). Supported
+            metrics are:
+                "euclidean", "l2",
+                "manhattan", "cityblock", "l1",
+                "chebyshev", "infinity",
+                "minkowski", "p".
+        metric_kws : dict, optional
+            Additional keyword arguments for the distance function, such as
+            the Minkowski distance parameter `p` for the "minkowski" metric.
+
+        Returns
+        -------
+        knn : plscan._sparse_graph.SparseGraph
+            A sparse graph containing the distance-sorted nearest neighbors for
+            each point.
+      )"
+  );
+
+  m.def(
+      "balltree_query", &balltree_query, nb::arg("tree"),
+      nb::arg("num_neighbors") = 5u, nb::arg("metric") = "euclidean",
+      nb::arg("metric_kws") = nb::dict(),
+      R"(
+        Performs a k-nearest neighbors query on a SpaceTree.
+
+        Parameters
+        ----------
+        tree : plscan._space_tree.SpaceTree
+            The SpaceTree to query (must be a BallTree!).
+        num_neighbors : int, optional
+            The number of nearest neighbors to find (default is 5).
+        metric : str, optional
+            The distance metric to use (default is "euclidean"). Supported
+            metrics are:
+                "euclidean", "l2",
+                "manhattan", "cityblock", "l1",
+                "chebyshev", "infinity",
+                "minkowski", "p".
+        metric_kws : dict, optional
+            Additional keyword arguments for the distance function, such as
+            the Minkowski distance parameter `p` for the "minkowski" metric.
+
+        Returns
+        -------
+        knn : plscan._sparse_graph.SparseGraph
+            A sparse graph containing the distance-sorted nearest neighbors for
+            each point.
+      )"
+  );
+}

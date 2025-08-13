@@ -12,3 +12,9 @@ amd64 target architecture!
 ```powershell
 pip install --no-deps --no-build-isolation --config-settings=cmake.build-type=Debug --config-settings=cmake.args="-T ClangCL" -ve . 
 ```
+
+## TODO
+
+- [ ] missing values in feature vectors.
+- [ ] sample weight core distances??
+- [ ] core graph / subcluster clustering??

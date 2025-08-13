@@ -946,5 +946,5 @@ class PersistenceTrace(object):
             **line_kws,
         )
         plt.ylim([0, plt.ylim()[1]])
-        plt.xlabel("Birth size in $(\\text{birth}, \\text{death}]$")
+        plt.xlabel("Birth size in (birth, death]")
         plt.ylabel("Total persistence")

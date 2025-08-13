@@ -6,7 +6,7 @@
 #include "_leaf_tree.h"
 
 [[nodiscard]] std::vector<int32_t> compute_segment_labels(
-    LeafTreeView const leaf_tree, std::span<uint32_t> const selected
+    LeafTreeView const leaf_tree, std::span<uint32_t const> const selected
 ) {
   size_t const num_segments = leaf_tree.size();
   size_t const num_clusters = selected.size();
@@ -28,7 +28,7 @@
 }
 
 [[nodiscard]] std::vector<float> compute_leaf_persistence(
-    LeafTreeView const leaf_tree, std::span<uint32_t> const selected
+    LeafTreeView const leaf_tree, std::span<uint32_t const> const selected
 ) {
   size_t const num_clusters = selected.size();
   std::vector<float> leaf_persistence(num_clusters);
@@ -41,9 +41,9 @@
 }
 
 void fill_labels(
-    LabellingView result, LeafTreeView const leaf_tree,
+    LabellingWriteView result, LeafTreeView const leaf_tree,
     CondensedTreeView const condensed_tree,
-    std::span<uint32_t> const selected_clusters,
+    std::span<uint32_t const> const selected_clusters,
     std::vector<int32_t> const &segment_labels,
     std::vector<float> const &leaf_persistence, size_t const num_points
 ) {
@@ -72,9 +72,9 @@ void fill_labels(
 }
 
 void compute_labels(
-    LabellingView result, LeafTreeView const leaf_tree,
+    LabellingWriteView result, LeafTreeView const leaf_tree,
     CondensedTreeView const condensed_tree,
-    std::span<uint32_t> const selected_clusters, size_t const num_points
+    std::span<uint32_t const> const selected_clusters, size_t const num_points
 ) {
   nb::gil_scoped_release guard{};
   auto const segment_labels = compute_segment_labels(
@@ -91,14 +91,14 @@ void compute_labels(
 
 Labelling compute_cluster_labels(
     LeafTree const leaf_tree, CondensedTree const condensed_tree,
-    array_ref<uint32_t> const selected_clusters, size_t const num_points
+    array_ref<uint32_t const> const selected_clusters, size_t const num_points
 ) {
-  Labelling result{num_points};
+  auto [label_view, label_cap] = Labelling::allocate(num_points);
   compute_labels(
-      result.view(), leaf_tree.view(), condensed_tree.view(),
+      label_view, leaf_tree.view(), condensed_tree.view(),
       to_view(selected_clusters), num_points
   );
-  return result;
+  return {label_view, std::move(label_cap)};
 }
 
 NB_MODULE(_labelling, m) {
@@ -106,8 +106,17 @@ NB_MODULE(_labelling, m) {
 
   nb::class_<Labelling>(m, "Labelling")
       .def(
-          nb::init<array_ref<int32_t>, array_ref<float>>(),
-          nb::arg("label").noconvert(), nb::arg("probability").noconvert()
+          "__init__",
+          [](Labelling *t, nb::handle label, nb::handle probability) {
+            // Support np.memmap and np.ndarray input types for sklearn
+            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            auto const asarray = nb::module_::import_("numpy").attr("asarray");
+            new (t) Labelling(
+                nb::cast<array_ref<int32_t const>>(asarray(label), false),
+                nb::cast<array_ref<float const>>(asarray(probability), false)
+            );
+          },
+          nb::arg("label"), nb::arg("probability")
       )
       .def_ro("label", &Labelling::label, nb::rv_policy::reference)
       .def_ro("probability", &Labelling::probability, nb::rv_policy::reference)
@@ -116,6 +125,15 @@ NB_MODULE(_labelling, m) {
           [](Labelling const &self) {
             return nb::make_tuple(self.label, self.probability)
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](Labelling const &self) {
+            return nb::make_tuple(
+                nb::type<Labelling>(),
+                nb::make_tuple(self.label, self.probability)
+            );
           }
       )
       .doc() = R"(
@@ -131,7 +149,7 @@ NB_MODULE(_labelling, m) {
 
   m.def(
       "compute_cluster_labels", &compute_cluster_labels, nb::arg("leaf_tree"),
-      nb::arg("condensed_tree"), nb::arg("selected_clusters"),
+      nb::arg("condensed_tree"), nb::arg("selected_clusters").noconvert(),
       nb::arg("num_points"),
       R"(
         Computes cluster labels and membership probabilities for the points.

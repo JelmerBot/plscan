@@ -12,7 +12,7 @@
 // -- Compute persistence trace
 
 size_t initialize_trace(
-    PersistenceTraceView result, LeafTreeView const leaf_tree
+    PersistenceTraceWriteView result, LeafTreeView const leaf_tree
 ) {
   // Copy the size thresholds into the trace_min_size buffer.
   size_t const num_leaves = leaf_tree.size();
@@ -51,7 +51,7 @@ size_t initialize_trace(
 
 template <typename function_t>
 void fill_persistences(
-    PersistenceTraceView result, LeafTreeView const leaf_tree,
+    PersistenceTraceWriteView result, LeafTreeView const leaf_tree,
     size_t const trace_size, function_t &&get_persistences
 ) {
   for (size_t idx = 1; idx < leaf_tree.size(); ++idx) {
@@ -106,7 +106,7 @@ void fill_persistences(
 }
 
 size_t fill_size_persistence(
-    PersistenceTraceView result, LeafTreeView const leaf_tree
+    PersistenceTraceWriteView result, LeafTreeView const leaf_tree
 ) {
   nb::gil_scoped_release guard{};
   size_t const trace_size = initialize_trace(result, leaf_tree);
@@ -122,7 +122,7 @@ size_t fill_size_persistence(
 }
 
 size_t fill_bi_persistence(
-    PersistenceTraceView result, LeafTreeView const leaf_tree,
+    PersistenceTraceWriteView result, LeafTreeView const leaf_tree,
     CondensedTreeView const condensed_tree, size_t const num_points
 ) {
   nb::gil_scoped_release guard{};
@@ -250,11 +250,19 @@ auto compute_stability_icicles(
 
 NB_MODULE(_persistence_trace, m) {
   m.doc() = "Module for persistence trace computation in PLSCAN.";
-
   nb::class_<PersistenceTrace>(m, "PersistenceTrace")
       .def(
-          nb::init<array_ref<float>, array_ref<float>>(),
-          nb::arg("min_size").noconvert(), nb::arg("persistence").noconvert()
+          "__init__",
+          [](PersistenceTrace *t, nb::handle min_size, nb::handle persistence) {
+            // Support np.memmap and np.ndarray input types for sklearn
+            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            auto const asarray = nb::module_::import_("numpy").attr("asarray");
+            new (t) PersistenceTrace(
+                nb::cast<array_ref<float const>>(asarray(min_size), false),
+                nb::cast<array_ref<float const>>(asarray(persistence), false)
+            );
+          },
+          nb::arg("min_size"), nb::arg("persistence")
       )
       .def_ro("min_size", &PersistenceTrace::min_size, nb::rv_policy::reference)
       .def_ro(
@@ -266,6 +274,15 @@ NB_MODULE(_persistence_trace, m) {
           [](PersistenceTrace const &self) {
             return nb::make_tuple(self.min_size, self.persistence)
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](PersistenceTrace const &self) {
+            return nb::make_tuple(
+                nb::type<PersistenceTrace>(),
+                nb::make_tuple(self.min_size, self.persistence)
+            );
           }
       )
       .doc() = R"(

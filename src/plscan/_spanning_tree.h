@@ -13,10 +13,21 @@ struct SpanningTreeCapsule {
 };
 
 // Non-owning view of a spanning tree
+struct SpanningTreeWriteView {
+  std::span<uint32_t> const parent;
+  std::span<uint32_t> const child;
+  std::span<float> const distance;
+
+  [[nodiscard]] size_t size() const {
+    return parent.size();
+  }
+};
+
+// Non-owning view of a spanning tree
 struct SpanningTreeView {
-  std::span<uint32_t> parent;
-  std::span<uint32_t> child;
-  std::span<float> distance;
+  std::span<uint32_t const> const parent;
+  std::span<uint32_t const> const child;
+  std::span<float const> const distance;
 
   [[nodiscard]] size_t size() const {
     return parent.size();
@@ -24,24 +35,27 @@ struct SpanningTreeView {
 };
 
 struct SpanningTree {
-  array_ref<uint32_t> const parent;
-  array_ref<uint32_t> const child;
-  array_ref<float> const distance;
+  array_ref<uint32_t const> parent;
+  array_ref<uint32_t const> child;
+  array_ref<float const> distance;
 
   SpanningTree() = default;
   SpanningTree(SpanningTree &&) = default;
   SpanningTree(SpanningTree const &) = default;
+  SpanningTree &operator=(SpanningTree &&) = default;
+  SpanningTree &operator=(SpanningTree const &) = default;
 
   // Python side constructor.
   SpanningTree(
-      array_ref<uint32_t> const parent, array_ref<uint32_t> const child,
-      array_ref<float> const distance
+      array_ref<uint32_t const> const parent,
+      array_ref<uint32_t const> const child,
+      array_ref<float const> const distance
   )
       : parent(parent), child(child), distance(distance){};
 
   // C++ side constructor that converts buffers to potentially smaller arrays.
   SpanningTree(
-      SpanningTreeView const view, SpanningTreeCapsule cap,
+      SpanningTreeWriteView const view, SpanningTreeCapsule cap,
       size_t const num_edges
   )
       : parent(to_array(view.parent, std::move(cap.parent), num_edges)),
@@ -54,7 +68,7 @@ struct SpanningTree {
     auto [children, child_cap] = new_buffer<uint32_t>(num_edges);
     auto [distances, distance_cap] = new_buffer<float>(num_edges);
     return std::make_pair(
-        SpanningTreeView{parents, children, distances},
+        SpanningTreeWriteView{parents, children, distances},
         SpanningTreeCapsule{
             std::move(parent_cap), std::move(child_cap), std::move(distance_cap)
         }

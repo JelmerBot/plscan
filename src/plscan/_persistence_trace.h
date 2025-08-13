@@ -12,9 +12,19 @@ struct PersistenceTraceCapsule {
 };
 
 // Non-owning view of a leaf tree
+struct PersistenceTraceWriteView {
+  std::span<float> const min_size;
+  std::span<float> const persistence;
+
+  [[nodiscard]] size_t size() const {
+    return min_size.size();
+  }
+};
+
+// Non-owning view of a leaf tree
 struct PersistenceTraceView {
-  std::span<float> min_size;
-  std::span<float> persistence;
+  std::span<float const> const min_size;
+  std::span<float const> const persistence;
 
   [[nodiscard]] size_t size() const {
     return min_size.size();
@@ -22,22 +32,25 @@ struct PersistenceTraceView {
 };
 
 struct PersistenceTrace {
-  array_ref<float> const min_size;
-  array_ref<float> const persistence;
+  array_ref<float const> min_size;
+  array_ref<float const> persistence;
 
   PersistenceTrace() = default;
   PersistenceTrace(PersistenceTrace &&) = default;
   PersistenceTrace(PersistenceTrace const &) = default;
+  PersistenceTrace &operator=(PersistenceTrace &&) = default;
+  PersistenceTrace &operator=(PersistenceTrace const &) = default;
 
   // Python side constructor.
   PersistenceTrace(
-      array_ref<float> const min_size, array_ref<float> const persistence
+      array_ref<float const> const min_size,
+      array_ref<float const> const persistence
   )
-      : min_size(min_size), persistence(persistence){}
+      : min_size(min_size), persistence(persistence) {}
 
   // C++ side constructor that converts buffers to potentially smaller arrays.
   PersistenceTrace(
-      PersistenceTraceView const view, PersistenceTraceCapsule cap,
+      PersistenceTraceWriteView const view, PersistenceTraceCapsule cap,
       size_t const num_traces
   )
       : min_size(to_array(view.min_size, std::move(cap.min_size), num_traces)),
@@ -50,7 +63,7 @@ struct PersistenceTrace {
     auto [sizes, size_cap] = new_buffer<float>(num_traces);
     auto [pers, pers_cap] = new_buffer<float>(num_traces);
     return std::make_pair(
-        PersistenceTraceView{sizes, pers},
+        PersistenceTraceWriteView{sizes, pers},
         PersistenceTraceCapsule{std::move(size_cap), std::move(pers_cap)}
     );
   }

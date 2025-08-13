@@ -14,11 +14,23 @@ struct LinkageTreeCapsule {
 };
 
 // Non-owning view of a leaf tree
+struct LinkageTreeWriteView {
+  std::span<uint32_t> const parent;
+  std::span<uint32_t> const child;
+  std::span<uint32_t> const child_count;
+  std::span<float> const child_size;
+
+  [[nodiscard]] size_t size() const {
+    return parent.size();
+  }
+};
+
+// Non-owning view of a leaf tree
 struct LinkageTreeView {
-  std::span<uint32_t> parent;
-  std::span<uint32_t> child;
-  std::span<uint32_t> child_count;
-  std::span<float> child_size;
+  std::span<uint32_t const> const parent;
+  std::span<uint32_t const> const child;
+  std::span<uint32_t const> const child_count;
+  std::span<float const> const child_size;
 
   [[nodiscard]] size_t size() const {
     return parent.size();
@@ -26,28 +38,33 @@ struct LinkageTreeView {
 };
 
 struct LinkageTree {
-  array_ref<uint32_t> const parent;
-  array_ref<uint32_t> const child;
-  array_ref<uint32_t> const child_count;
-  array_ref<float> const child_size;
+  array_ref<uint32_t const> parent;
+  array_ref<uint32_t const> child;
+  array_ref<uint32_t const> child_count;
+  array_ref<float const> child_size;
 
   LinkageTree() = default;
   LinkageTree(LinkageTree &&) = default;
   LinkageTree(LinkageTree const &) = default;
+  LinkageTree &operator=(LinkageTree &&) = default;
+  LinkageTree &operator=(LinkageTree const &) = default;
 
   // Python side constructor.
   LinkageTree(
-      array_ref<uint32_t> const parent, array_ref<uint32_t> const child,
-      array_ref<uint32_t> const child_count, array_ref<float> const child_size
+      array_ref<uint32_t const> const parent,
+      array_ref<uint32_t const> const child,
+      array_ref<uint32_t const> const child_count,
+      array_ref<float const> const child_size
   )
       : parent(parent),
         child(child),
         child_count(child_count),
-        child_size(child_size){}
+        child_size(child_size) {}
 
   // C++ side constructor that converts buffers to potentially smaller arrays
   LinkageTree(
-      LinkageTreeView const view, LinkageTreeCapsule cap, size_t const num_edges
+      LinkageTreeWriteView const view, LinkageTreeCapsule cap,
+      size_t const num_edges
   )
       : parent(to_array(view.parent, std::move(cap.parent), num_edges)),
         child(to_array(view.child, std::move(cap.child), num_edges)),
@@ -66,7 +83,7 @@ struct LinkageTree {
     auto [count, count_cap] = new_buffer<uint32_t>(buffer_size);
     auto [size, size_cap] = new_buffer<float>(buffer_size);
     return std::make_pair(
-        LinkageTreeView{parent, child, count, size},
+        LinkageTreeWriteView{parent, child, count, size},
         LinkageTreeCapsule{parent_cap, child_cap, count_cap, size_cap}
     );
   }

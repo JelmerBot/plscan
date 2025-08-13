@@ -5,7 +5,9 @@ from scipy.spatial.distance import squareform
 from sklearn.base import BaseEstimator, ClusterMixin
 from sklearn.utils import check_array
 from sklearn.utils.validation import check_is_fitted, _check_sample_weight
-from sklearn.utils._param_validation import Interval, InvalidParameterError
+from sklearn.utils.validation import validate_data
+from sklearn.utils._param_validation import Interval, StrOptions, InvalidParameterError
+from sklearn.neighbors import KDTree, BallTree
 from numbers import Real, Integral
 
 from . import api
@@ -34,6 +36,24 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         mutual reachability distances. Higher values produce smoother density
         profiles with fewer peaks. Minimum spanning tree inputs are assumed to
         contain mutual reachability distances and ignore this parameter.
+    space_tree : str, default="auto"
+        The type of tree to use for the search. Options are "auto", "kdtree" and
+        "balltree". If "auto", a "kdtree" is used if that supports the selected
+        metric. Space trees are not used when `metric` is "precomputed".
+    metric : str, default="euclidean"
+        The distance metric to use. Default is "euclidean". Valid options for
+        kd-trees are:
+            "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
+            "infinity", "minkowski", "p".
+        Additional valid options for ball-trees are:
+            "seuclidean", "hamming", "braycurtis", "canberra", "haversine",
+            "mahalanobis", "dice", "jaccard", "russellrao", "rogerstanimoto",
+            "sokalsneath".
+        Use "precomputed" if the input to `.fit()` contains distances. See
+        sklearn documentation for metric definitions.
+    metric_kws : dict | None, default is None
+        Additional keyword arguments for the distance metric. For example, `p`
+        for the Minkowski distance.
     min_cluster_size : float, optional
         The minimum size limit for clusters, defaults to the value of
         min_samples. Values below min_samples are not allowed, as the
@@ -92,8 +112,35 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
     """
 
+    valid_kdtree_metrics = [
+        "euclidean",
+        "l2",
+        "manhattan",
+        "cityblock",
+        "l1",
+        "chebyshev",
+        "infinity",
+        "minkowski",
+        "p",
+    ]
+    valid_balltree_metrics = valid_kdtree_metrics + [
+        "seuclidean",
+        "braycurtis",
+        "canberra",
+        "haversine",
+        "mahalanobis",
+        "hamming",
+        "dice",
+        "jaccard",
+        "russellrao",
+        "rogerstanimoto",
+        "sokalsneath",
+    ]
+
     _parameter_constraints = dict(
         min_samples=[Interval(Integral, 2, None, closed="left")],
+        space_tree=[StrOptions({"auto", "kdtree", "balltree"})],
+        metric=[StrOptions({*valid_balltree_metrics, "precomputed"})],
         min_cluster_size=[None, Interval(Real, 2.0, None, closed="left")],
         max_cluster_size=[Interval(Real, 2.0, None, closed="right")],
         use_bi_persistence=["boolean"],
@@ -104,12 +151,18 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         self,
         *,
         min_samples: int = 5,
+        space_tree: str = "auto",
+        metric: str = "euclidean",
+        metric_kws: dict | None = None,
         min_cluster_size: float | None = None,
         max_cluster_size: float = np.inf,
         use_bi_persistence: bool = False,
         num_threads: int | None = None,
     ):
         self.min_samples = min_samples
+        self.space_tree = space_tree
+        self.metric = metric
+        self.metric_kws = metric_kws
         self.min_cluster_size = min_cluster_size
         self.max_cluster_size = max_cluster_size
         self.use_bi_persistence = use_bi_persistence
@@ -125,9 +178,9 @@ class PLSCAN(ClusterMixin, BaseEstimator):
     ):
         """
         Computes PLSCAN clusters and hierarchies for the input data. Several
-        inputs are supported, including precomputed sorted (partial) minimums
-        spanning trees, dense or sparse distance matrices, and k-nearest
-        neighbors graphs.
+        inputs are supported, including feature vectors, precomputed sorted
+        (partial) minimums spanning trees, dense or sparse distance matrices,
+        and k-nearest neighbors graphs.
 
         The input data does not have to form a single connected component, and
         the algorithm will select the minimum cluster size that maximizes the
@@ -136,9 +189,13 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         Parameters
         ----------
-        X
-            The distances to extract clusters from. It can be one of the
-            following formats:
+        X : array_like | tuple | csr_array
+            The input data. If `metric` is not set to "precomputed", the X must
+            be a 2D array of shape (num_points, num_features). Missing values
+            are not supported.
+
+            If `metric` is set to "precomputed", the input is a (sparse)
+            distance matrix in one of the following formats:
 
             1. tuple of (edges, num_points)
                 A minimum spanning tree where `edges` is a 2D array in the
@@ -178,22 +235,64 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         # Validate parameters
         self._validate_params()
         if self.min_cluster_size is None:
-            self.min_cluster_size = self.min_samples
+            min_cluster_size = self.min_samples
         else:
-            if self.min_cluster_size < self.min_samples:
+            min_cluster_size = self.min_cluster_size
+            if min_cluster_size < self.min_samples:
                 raise InvalidParameterError(
                     "Minimum cluster size must be at least equal to "
                     f"min_samples ({self.min_samples})."
                 )
-        if self.max_cluster_size <= self.min_cluster_size:
+        if self.max_cluster_size <= min_cluster_size:
             raise InvalidParameterError(
                 "Maximum cluster size must be greater than the minimum cluster size."
             )
+        if self.metric in ["minkowski", "p"]:
+            if self.metric_kws is None or "p" not in self.metric_kws:
+                raise InvalidParameterError(
+                    "Minkowski distance requires a `metric_kws` 'p' parameter."
+                )
+            if self.metric_kws["p"] < 1:
+                raise InvalidParameterError(
+                    "Minkowski distance requires a `metric_kws` 'p' parameter >= 1."
+                )
+        else:
+            if self.metric_kws is not None and len(self.metric_kws) > 0:
+                raise InvalidParameterError(
+                    "Metric keyword arguments are only supported for Minkowski "
+                    "distance. Got `metric_kws` for metric "
+                    f"{self.metric} instead."
+                )
+
+        if self.metric != "precomputed":
+            if self.space_tree == "auto":
+                space_tree = (
+                    "kdtree" if self.metric in KDTree.valid_metrics else "balltree"
+                )
+            else:
+                space_tree = self.space_tree
+                tree = KDTree if space_tree == "kdtree" else BallTree
+                if self.metric not in tree.valid_metrics:
+                    raise InvalidParameterError(
+                        f"Invalid metric '{self.metric}' for {space_tree}"
+                    )
+
         if self.num_threads is not None:
             api.set_num_threads(self.num_threads)
 
-        # Validate input
-        X, self._num_points, is_sorted, is_mst = self._check_input(X)
+        # Validate inputs
+        if self.metric != "precomputed":
+            X = validate_data(
+                self,
+                X,
+                y=None,
+                dtype=np.float32,
+                ensure_min_samples=self.min_samples,
+            )
+            self._num_points = X.shape[0]
+        else:
+            X, self._num_points, is_sorted, is_mst = self._check_input(X)
+
         if sample_weights is not None:
             sample_weights = _check_sample_weight(
                 sample_weights,
@@ -202,21 +301,38 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                 ensure_non_negative=True,
             )
 
-        # Perform clustering
-        if is_mst:
+        # Compute / extract MST
+        if self.metric != "precomputed":
+            self._mutual_graph = None
+            self._minimum_spanning_tree, self._neighbors, self.core_distances_ = (
+                api.compute_mutual_spanning_tree(
+                    X,
+                    space_tree=space_tree,
+                    min_samples=self.min_samples,
+                    metric=self.metric,
+                    metric_kws=self.metric_kws,
+                )
+            )
+        elif is_mst:
             self.core_distances_ = None
             self._mutual_graph = None
+            self._neighbors = None
             self._minimum_spanning_tree = api.SpanningTree(
                 X[:, 0].astype(np.uint32, copy=False),
                 X[:, 1].astype(np.uint32, copy=False),
                 X[:, 2].astype(np.float32, copy=False),
             )
         else:
-            (self._minimum_spanning_tree, self._mutual_graph, self.core_distances_) = (
-                api.compute_mutual_spanning_forest(
-                    X, min_samples=self.min_samples, is_sorted=is_sorted
-                )
+            self._neighbors = None
+            (
+                self._minimum_spanning_tree,
+                self._mutual_graph,
+                self.core_distances_,
+            ) = api.extract_mutual_spanning_forest(
+                X, min_samples=self.min_samples, is_sorted=is_sorted
             )
+
+        # Compute clusters from MST
         (
             (self.labels_, self.probabilities_),
             self.selected_clusters_,
@@ -228,7 +344,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self._minimum_spanning_tree,
             self._num_points,
             sample_weights=sample_weights,
-            min_cluster_size=self.min_cluster_size,
+            min_cluster_size=min_cluster_size,
             max_cluster_size=self.max_cluster_size,
             use_bi_persistence=self.use_bi_persistence,
         )
@@ -405,7 +521,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             ensure_2d=False,
             ensure_non_negative=True,
             ensure_all_finite=False,
-            ensure_min_samples=self.min_samples,
+            ensure_min_samples=self.min_samples + 1,
             input_name="X",
         )
 
@@ -463,9 +579,9 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                 f"got {len(X)} elements instead."
             )
         edges, num_points = X
-        if num_points < self.min_samples:
+        if num_points < self.min_samples + 1:
             raise ValueError(
-                f"Number of points in MST must be at least {self.min_samples}, "
+                f"Number of points in MST must be at least {self.min_samples + 1}, "
                 f"got {num_points} instead."
             )
         edges = check_array(edges, ensure_non_negative=True, input_name="MST edges")

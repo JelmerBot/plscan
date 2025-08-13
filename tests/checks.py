@@ -10,6 +10,14 @@ def valid_spanning_forest(msf, X):
     assert msf.parent.size <= (X.shape[0] - 1)
 
 
+def valid_neighbor_indices(indices, X, min_samples):
+    assert isinstance(indices, np.ndarray)
+    assert indices.shape[0] == X.shape[0]
+    assert indices.shape[1] == min_samples + 2
+    assert indices.dtype == np.int32
+    assert np.all(indices >= 0) and np.all(indices < X.shape[0])
+
+
 def valid_mutual_graph(mut_graph, X, *, missing=False):
     assert isinstance(mut_graph, api.SparseGraph)
     assert mut_graph.indptr.shape[0] == X.shape[0] + 1
@@ -43,7 +51,12 @@ def valid_probabilities(probabilities, X):
 def valid_selected_clusters(selected_clusters, labels):
     assert isinstance(selected_clusters, np.ndarray)
     assert selected_clusters.dtype == np.uint32
-    assert selected_clusters.shape[0] == labels.max() + 1
+    if np.all(labels == -1):
+        assert selected_clusters.shape[0] == 0 or selected_clusters == np.array(
+            [0], dtype=np.uint32
+        )
+    else:
+        assert selected_clusters.shape[0] == labels.max() + 1
     assert np.all(selected_clusters >= 0)
 
 

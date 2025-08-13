@@ -57,7 +57,8 @@ class LinkageState {
 };
 
 size_t process_spanning_tree(
-    LinkageTreeView tree, SpanningTreeView const mst, size_t const num_points,
+    LinkageTreeWriteView tree, SpanningTreeView const mst,
+    size_t const num_points,
     std::optional<array_ref<float>> const sample_weights
 ) {
   nb::gil_scoped_release guard{};
@@ -94,8 +95,8 @@ NB_MODULE(_linkage_tree, m) {
   nb::class_<LinkageTree>(m, "LinkageTree")
       .def(
           nb::init<
-              array_ref<uint32_t>, array_ref<uint32_t>, array_ref<uint32_t>,
-              array_ref<float>>(),
+              array_ref<uint32_t const>, array_ref<uint32_t const>,
+              array_ref<uint32_t const>, array_ref<float const>>(),
           nb::arg("parent").noconvert(), nb::arg("child").noconvert(),
           nb::arg("child_count").noconvert(), nb::arg("child_size").noconvert()
       )
@@ -113,6 +114,17 @@ NB_MODULE(_linkage_tree, m) {
                        self.child_size
             )
                 .attr("__iter__")();
+          }
+      )
+      .def(
+          "__reduce__",
+          [](LinkageTree const &self) {
+            return nb::make_tuple(
+                nb::type<LinkageTree>(),
+                nb::make_tuple(
+                    self.parent, self.child, self.child_count, self.child_size
+                )
+            );
           }
       )
       .doc() = R"(
