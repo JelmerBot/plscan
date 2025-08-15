@@ -28,6 +28,11 @@ if (NOT SKBUILD)
   rerun the above after editing C++ files.")
 endif ()
 
+# - Avoid issues with CMAKE_GENERATOR_PLATFORM from cibuildwheels
+if (NOT WIN32)
+  unset(CMAKE_GENERATOR_PLATFORM)
+endif()
+
 # - Build type
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
@@ -62,14 +67,21 @@ foreach (EXT_SOURCE ${EXT_SOURCES})
     message(STATUS "Found extension: ${EXT_DESTINATION}${EXT_NAME}")
 
     # Add speed optimized module target
-    nanobind_add_module(${EXT_NAME} NOMINSIZE STABLE_ABI LTO NB_DOMAIN ${SKBUILD_PROJECT_NAME} ${EXT_SOURCE})
+    nanobind_add_module(${EXT_NAME} 
+        NOMINSIZE 
+        STABLE_ABI 
+        FREE_THREADED 
+        LTO 
+        NB_DOMAIN ${SKBUILD_PROJECT_NAME} 
+        ${EXT_SOURCE}
+    )
     target_link_libraries(${EXT_NAME} PRIVATE OpenMP::OpenMP_CXX)
     nanobind_add_stub(
-            ${EXT_STUB}
-            MODULE ${EXT_NAME}
-            OUTPUT ${EXT_STUB_OUT}
-            PYTHON_PATH $<TARGET_FILE_DIR:${EXT_NAME}>
-            DEPENDS ${EXT_NAME}
+        ${EXT_STUB}
+        MODULE ${EXT_NAME}
+        OUTPUT ${EXT_STUB_OUT}
+        PYTHON_PATH $<TARGET_FILE_DIR:${EXT_NAME}>
+        DEPENDS ${EXT_NAME}
     )
     install(TARGETS ${EXT_NAME} LIBRARY DESTINATION ${EXT_DESTINATION})
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_STUB_OUT} DESTINATION ${EXT_DESTINATION})

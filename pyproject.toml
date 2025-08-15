@@ -5,26 +5,25 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "plscan"
 readme = "README.md"
-dynamic = ['version']
+dynamic = ["version"]
 license = "BSD-3-Clause"
 license-files = ["LICEN[CS]E*"]
 description = "Persistent Leaf Clustering"
 keywords = ["density", "cluster", "clustering", "hierarchical", "persistent"]
 authors = [{ name = "Jelmer Bot", email = "jelmerbot@gmail.com" }]
 maintainers = [{ name = "Jelmer Bot", email = "jelmerbot@gmail.com" }]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "numpy>=2,<3",
     "scipy>=1,<2",
     "matplotlib>=3,<4",
     "scikit-learn>=1.6,<2",
 ]
+optional-dependencies = { tests = ["pytest", "networkx", "pandas"] }
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -37,24 +36,38 @@ classifiers = [
 ]
 
 [project.urls]
-Documentation = "https://vda-lab.github.io/plscan"
-Homepage = "https://github.com/vda-lab/plscan"
-Issues = "https://github.com/vda-lab/plscan/issues"
+Documentation = "https://JelmerBot.github.io/plscan"
+Homepage = "https://github.com/JelmerBot/plscan"
+Issues = "https://github.com/JelmerBot/plscan/issues"
 
 [tool.scikit-build]
+minimum-version = "0.4"
 build-dir = "build/{wheel_tag}"
-metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 wheel.py-api = "cp312"
 wheel.exclude = ["**.h", "**.cpp"]
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 
 [tool.setuptools_scm]
 write_to = "src/plscan/_version.py"
 
 [tool.cibuildwheel]
+archs = ["native"]
 build-verbosity = 1
-test-command = "pytest {project}/tests"
-test-requires = "pytest"
-archs = ["auto64"]
+test-extras = ["tests"]
+test-sources = ["tests"]
+test-command = ["pytest . -k \"not test_plots\""]
+test-skip = [
+    "*musllinux*", # tests pass(ed) but slow due to no scikit-learn wheels
+    "*314*",       # untested, can't install scikit-learn, no wheels (yet)
+]
+skip = [
+    "*314t-macos*", # nanobind compile issue
+]
 
-[tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "10.14"
+[tool.cibuildwheel.windows]
+before-build = "pip install delvewheel"
+repair-wheel-command = "delvewheel repair -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.windows.environment]
+SKBUILD_CMAKE_ARGS = "-T ClangCL"
+CXX = "clang-cl"

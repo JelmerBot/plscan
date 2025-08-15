@@ -1,13 +1,14 @@
 import pytest
 import numpy as np
+from pathlib import Path
 from scipy import sparse as sp
 from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import NearestNeighbors
 from sklearn.neighbors._kd_tree import KDTree32
 from sklearn.neighbors._ball_tree import BallTree32
-from sklearn.preprocessing import StandardScaler
-from sklearn.datasets import make_blobs
-from sklearn.utils import shuffle
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.datasets import make_blobs
+# from sklearn.utils import shuffle
 
 from plscan import PLSCAN
 from plscan.api import (
@@ -16,6 +17,9 @@ from plscan.api import (
     distance_matrix_to_csr,
     knn_to_csr,
 )
+
+# Ensure random data does not change on different OSes
+datapath = Path(__file__).parent / "data"
 
 # used to select which input the algorithm should use (X or X_bool)
 boolean_metrics = {
@@ -42,17 +46,20 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(scope="session")
 def X():
-    X, y = make_blobs(n_samples=200, random_state=10)
-    X, y = shuffle(X, y, random_state=7)
-    X = StandardScaler().fit_transform(X)
-    return X.astype(np.float32)
+    # X, y = make_blobs(n_samples=200, random_state=10)
+    # X, y = shuffle(X, y, random_state=7)
+    # X = StandardScaler().fit_transform(X).astype(np.float32)
+    # np.save(datapath / "X.npy", X)
+    return np.load(datapath / "X.npy")
 
 
 @pytest.fixture(scope="session")
 def X_bool():
-    p = 0.25
-    rng = np.random.Generator(np.random.PCG64(10))
-    return rng.choice(a=[True, False], size=(200, 100), p=[p, 1 - p]).astype(np.float32)
+    # p = 0.25
+    # rng = np.random.Generator(np.random.PCG64(10))
+    # X_bool = rng.choice(a=[True, False], size=(200, 100), p=[p, 1 - p]).astype(np.float32)
+    # np.save(datapath / "X_bool.npy", X_bool)
+    return np.load(datapath / "X_bool.npy")
 
 
 @pytest.fixture(scope="session")

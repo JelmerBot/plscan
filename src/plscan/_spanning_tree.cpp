@@ -453,8 +453,8 @@ space_tree_boruvka_fun_t get_kdtree_executor(char const *const metric) {
   if (auto const it = lookup.find(parse_metric(metric)); it != lookup.end())
     return it->second;
 
-  throw std::invalid_argument(
-      "Unsupported metric for KDTree query: " + std::string(metric)
+  throw nb::value_error(
+      nb::str("Unsupported metric for KDTree query: {}").format(metric).c_str()
   );
 }
 
@@ -508,8 +508,10 @@ space_tree_boruvka_fun_t get_balltree_executor(char const *const metric) {
   if (auto const it = lookup.find(parse_metric(metric)); it != lookup.end())
     return it->second;
 
-  throw std::invalid_argument(
-      "Unsupported metric for BallTree query: " + std::string(metric)
+  throw nb::value_error(
+      nb::str("Unsupported metric for BallTree query: {}")
+          .format(metric)
+          .c_str()
   );
 }
 
@@ -599,7 +601,7 @@ NB_MODULE(_spanning_tree, m) {
   m.def(
       "compute_spanning_tree_kdtree", &compute_spanning_tree_kdtree,
       nb::arg("tree"), nb::arg("knn"), nb::arg("core_distances"),
-      nb::arg("metric") = "euclidean", nb::arg("metric_kws") = nb::dict(),
+      nb::arg("metric"), nb::arg("metric_kws"),
       R"(
         Computes a minimum spanning tree (MST) using a k-d tree.
 
@@ -611,14 +613,13 @@ NB_MODULE(_spanning_tree, m) {
             The k-nearest neighbors graph.
         core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The core distances for each point.
-        metric : str, optional
-            The distance metric to use (default is "euclidean"). Supported
-            metrics are:
+        metric : str
+            The distance metric to use. Supported metrics are:
                 "euclidean", "l2",
                 "manhattan", "cityblock", "l1",
                 "chebyshev", "infinity",
                 "minkowski", "p".
-        metric_kws : dict, optional
+        metric_kws : dict
             Additional keyword arguments for the distance function, such as
             the Minkowski distance parameter `p` for the "minkowski" metric.
 
@@ -632,7 +633,7 @@ NB_MODULE(_spanning_tree, m) {
   m.def(
       "compute_spanning_tree_balltree", &compute_spanning_tree_balltree,
       nb::arg("tree"), nb::arg("knn"), nb::arg("core_distances"),
-      nb::arg("metric") = "euclidean", nb::arg("metric_kws") = nb::dict(),
+      nb::arg("metric"), nb::arg("metric_kws"),
       R"(
         Computes a minimum spanning tree (MST) using a ball tree.
 
@@ -644,14 +645,13 @@ NB_MODULE(_spanning_tree, m) {
             The k-nearest neighbors graph.
         core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
             The core distances for each point.
-        metric : str, optional
-            The distance metric to use (default is "euclidean"). Supported
-            metrics are:
-                "euclidean", "l2",
-                "manhattan", "cityblock", "l1",
-                "chebyshev", "infinity",
-                "minkowski", "p".
-        metric_kws : dict, optional
+        metric : str
+            The distance metric to use. Supported metrics are:
+                "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
+                "infinity", "minkowski", "p", "seuclidean", "hamming", 
+                "braycurtis", "canberra", "haversine", "mahalanobis", "dice", 
+                "jaccard", "russellrao", "rogerstanimoto", "sokalsneath".
+        metric_kws : dict
             Additional keyword arguments for the distance function, such as
             the Minkowski distance parameter `p` for the "minkowski" metric.
 

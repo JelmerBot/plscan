@@ -4,8 +4,8 @@
 #include <cmath>
 #include <map>
 #include <span>
-#include <stdexcept>
 #include <vector>
+#include <cstring>
 
 #include "_array.h"
 
@@ -29,8 +29,14 @@ enum class Metric {
   Sokalsneath
 };
 
-inline Metric parse_metric(std::string_view const metric) {
-  static std::map<std::string_view const, Metric> const metric_map = {
+struct strless {
+  bool operator()(char const *const a, char const *const b) const {
+    return std::strcmp(a, b) < 0;
+  }
+};
+
+inline Metric parse_metric(char const *const metric) {
+  static std::map<char const *const, Metric, strless> const metric_map = {
       {"l2", Metric::Euclidean},
       {"euclidean", Metric::Euclidean},
       {"l1", Metric::Cityblock},
@@ -54,7 +60,9 @@ inline Metric parse_metric(std::string_view const metric) {
   };
   if (auto const it = metric_map.find(metric); it != metric_map.end())
     return it->second;
-  throw std::invalid_argument("Unsupported metric!");
+  throw nb::value_error(  //
+      nb::str("Unsupported metric: {}").format(metric).c_str()
+  );
 }
 
 // --- Parameter pack helpers
