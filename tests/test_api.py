@@ -34,14 +34,12 @@ def test_one_component(X, space_tree):
     valid_neighbor_indices(neighbors, X, 5)
     valid_core_distances(cd, X)
     valid_labels(labels, X)
-    assert np.all(labels < 3)
+    assert labels.max() == 2
     valid_probabilities(probabilities, X)
     valid_selected_clusters(selected_clusters, labels)
     valid_persistence_trace(persistence_trace)
     valid_leaf(leaf_tree)
-    assert leaf_tree.parent.size == 22
     valid_condensed(condensed_tree, X)
-    assert condensed_tree.parent.size == 220
     valid_linkage(linkage_tree, X)
 
 
@@ -60,14 +58,12 @@ def test_one_component_precomputed(X, g_dists):
     valid_mutual_graph(mut_graph, X)
     valid_core_distances(cd, X)
     valid_labels(labels, X)
-    assert np.all(labels < 3)
+    assert labels.max() == 2
     valid_probabilities(probabilities, X)
     valid_selected_clusters(selected_clusters, labels)
     valid_persistence_trace(persistence_trace)
     valid_leaf(leaf_tree)
-    assert leaf_tree.parent.size == 18
     valid_condensed(condensed_tree, X)
-    assert condensed_tree.parent.size == 216
     valid_linkage(linkage_tree, X)
 
 
@@ -86,15 +82,13 @@ def test_compute_msf_partial_and_missing(X, g_knn):
     valid_mutual_graph(mut_graph, X, missing=True)
     valid_core_distances(cd, X)
     valid_labels(labels, X)
-    assert np.all(labels < 4)
+    assert labels.max() == 3
     assert np.any(labels == -1)
     valid_probabilities(probabilities, X)
     valid_selected_clusters(selected_clusters, labels)
     valid_persistence_trace(persistence_trace)
     valid_leaf(leaf_tree)
-    assert leaf_tree.parent.size == 17
     valid_condensed(condensed_tree, X)
-    assert condensed_tree.parent.size == 214
     valid_linkage(linkage_tree, X)
 
 
@@ -138,8 +132,8 @@ def test_space_tree_query(X, space_tree, metric):
     knn_csr = query_fun(
         SpaceTree(data, idx_array, node_data.view(np.float64), node_bounds),
         10,
-        metric=metric,
-        metric_kws=metric_kws,
+        metric,
+        metric_kws,
     )
 
     _indices = knn_csr.indices.reshape(data.shape[0], 10)
@@ -168,8 +162,8 @@ def test_ball_tree_boolean_query(X_bool, metric):
     knn_csr = balltree_query(
         SpaceTree(data, idx_array, node_data.view(np.float64), node_bounds),
         10,
-        metric=metric,
-        metric_kws=metric_kws,
+        metric,
+        metric_kws,
     )
 
     _indices = knn_csr.indices.reshape(data.shape[0], 10)

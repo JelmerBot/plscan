@@ -89,13 +89,9 @@ def compute_mutual_spanning_tree(
 
     # This knn contains explicit self-loops (first edge on each row), increment
     # min_samples to correct for that!
-    knn = query_fun(
-        cpp_tree, num_neighbors=min_samples + 2, metric=metric, metric_kws=metric_kws
-    )
+    knn = query_fun(cpp_tree, min_samples + 2, metric, metric_kws)
     core_distances = extract_core_distances(knn, min_samples + 1, is_sorted=True)
-    spanning_tree = spanning_tree_fun(
-        cpp_tree, knn, core_distances, metric=metric, metric_kws=metric_kws
-    )
+    spanning_tree = spanning_tree_fun(cpp_tree, knn, core_distances, metric, metric_kws)
 
     return (
         sort_spanning_tree(spanning_tree),

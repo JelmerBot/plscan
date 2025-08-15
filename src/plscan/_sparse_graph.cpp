@@ -90,10 +90,12 @@ void apply_core_distances(
     auto row_order = order_view.subspan(start, end - start);
     std::iota(row_order.begin(), row_order.end(), start);
 
-    // sort argsort indices
-    std::ranges::sort(
-        row_order, std::ranges::less{},
-        [data = graph.data](uint32_t const a) { return data[a]; }
+    // sort argsort indices (some OpenMPs do not support std::ranges::sort yet)
+    std::sort(
+        row_order.begin(), row_order.end(),
+        [&data = graph.data](uint32_t const a, uint32_t const b) {
+          return data[a] < data[b];
+        }
     );
 
     // fill sorted data and indices

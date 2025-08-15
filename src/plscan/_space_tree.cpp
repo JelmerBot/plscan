@@ -190,8 +190,8 @@ parallel_query_fun_t get_kdtree_executor(char const *const metric) {
   if (auto const it = lookup.find(parse_metric(metric)); it != lookup.end())
     return it->second;
 
-  throw std::invalid_argument(
-      "Unsupported metric for KDTree query: " + std::string(metric)
+  throw nb::value_error(
+      nb::str("Unsupported metric for KDTree query: {}").format(metric).c_str()
   );
 }
 
@@ -242,8 +242,10 @@ parallel_query_fun_t get_balltree_executor(char const *const metric) {
   if (auto const it = lookup.find(parse_metric(metric)); it != lookup.end())
     return it->second;
 
-  throw std::invalid_argument(
-      "Unsupported metric for BallTree query: " + std::string(metric)
+  throw nb::value_error(
+      nb::str("Unsupported metric for BallTree query: {}")
+          .format(metric)
+          .c_str()
   );
 }
 
@@ -394,9 +396,8 @@ NB_MODULE(_space_tree, m) {
   );
 
   m.def(
-      "kdtree_query", &kdtree_query, nb::arg("tree"),
-      nb::arg("num_neighbors") = 5u, nb::arg("metric") = "euclidean",
-      nb::arg("metric_kws") = nb::dict(),
+      "kdtree_query", &kdtree_query, nb::arg("tree"), nb::arg("num_neighbors"),
+      nb::arg("metric"), nb::arg("metric_kws"),
       R"(
         Performs a k-nearest neighbors query on a SpaceTree.
 
@@ -404,16 +405,15 @@ NB_MODULE(_space_tree, m) {
         ----------
         tree : plscan._space_tree.SpaceTree
             The SpaceTree to query (must be a KDTree!).
-        num_neighbors : int, optional
-            The number of nearest neighbors to find (default is 5).
-        metric : str, optional
-            The distance metric to use (default is "euclidean"). Supported
-            metrics are:
+        num_neighbors : int
+            The number of nearest neighbors to find.
+        metric : str
+            The distance metric to use. Supported metrics are:
                 "euclidean", "l2",
                 "manhattan", "cityblock", "l1",
                 "chebyshev", "infinity",
                 "minkowski", "p".
-        metric_kws : dict, optional
+        metric_kws : dict
             Additional keyword arguments for the distance function, such as
             the Minkowski distance parameter `p` for the "minkowski" metric.
 
@@ -427,8 +427,7 @@ NB_MODULE(_space_tree, m) {
 
   m.def(
       "balltree_query", &balltree_query, nb::arg("tree"),
-      nb::arg("num_neighbors") = 5u, nb::arg("metric") = "euclidean",
-      nb::arg("metric_kws") = nb::dict(),
+      nb::arg("num_neighbors"), nb::arg("metric"), nb::arg("metric_kws"),
       R"(
         Performs a k-nearest neighbors query on a SpaceTree.
 
@@ -436,16 +435,16 @@ NB_MODULE(_space_tree, m) {
         ----------
         tree : plscan._space_tree.SpaceTree
             The SpaceTree to query (must be a BallTree!).
-        num_neighbors : int, optional
-            The number of nearest neighbors to find (default is 5).
-        metric : str, optional
-            The distance metric to use (default is "euclidean"). Supported
+        num_neighbors : int
+            The number of nearest neighbors to find.
+        metric : str
+            The distance metric to use. Supported
             metrics are:
-                "euclidean", "l2",
-                "manhattan", "cityblock", "l1",
-                "chebyshev", "infinity",
-                "minkowski", "p".
-        metric_kws : dict, optional
+              "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
+              "infinity", "minkowski", "p", "seuclidean", "hamming", 
+              "braycurtis", "canberra", "haversine", "mahalanobis", "dice", 
+              "jaccard", "russellrao", "rogerstanimoto", "sokalsneath".
+        metric_kws : dict
             Additional keyword arguments for the distance function, such as
             the Minkowski distance parameter `p` for the "minkowski" metric.
 

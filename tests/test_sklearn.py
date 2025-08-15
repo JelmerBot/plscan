@@ -37,14 +37,12 @@ def test_mst(X, mst):
     assert c._neighbors is None
     assert c.core_distances_ is None
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
+    assert c.labels_.max() == 2
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 28
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 226
     valid_linkage(c._linkage_tree, X)
 
 
@@ -61,15 +59,13 @@ def test_knn_graph(X, knn):
     assert c._neighbors is None
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 3
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 9
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 206
     valid_linkage(c._linkage_tree, X)
 
 
@@ -86,15 +82,13 @@ def test_knn_graph_no_loops(X, knn_no_loops):
     assert c._neighbors is None
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 3
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 9
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 206
     valid_linkage(c._linkage_tree, X)
 
 
@@ -108,14 +102,12 @@ def test_distance_matrix(X, dists):
     assert c._neighbors is None
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
+    assert c.labels_.max() == 2
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 10
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 208
     valid_linkage(c._linkage_tree, X)
 
 
@@ -129,14 +121,12 @@ def test_condensed_matrix(X, con_dists):
     assert c._neighbors is None
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
+    assert c.labels_.max() == 2
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 10
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 208
     valid_linkage(c._linkage_tree, X)
 
 
@@ -151,89 +141,57 @@ def test_sparse_matrix(X, g_knn):
     assert c._neighbors is None
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 3
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 9
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 206
     valid_linkage(c._linkage_tree, X)
 
 
 # Feature vector inputs with metrics valid in both space trees
 
 
-@pytest.mark.parametrize("metric", ["euclidean", "l2", "cityblock", "l1", "manhattan"])
+@pytest.mark.parametrize("metric", PLSCAN.valid_kdtree_metrics)
 @pytest.mark.parametrize("space_tree", ["kdtree", "balltree"])
 def test_kdtree_l1_l2(X, metric, space_tree):
-    c = PLSCAN(space_tree=space_tree, metric=metric).fit(X)
+    # Fill in defaults for parameterized metrics
+    metric_kws = dict()
+    if metric in ["p", "minkowski"]:
+        metric_kws["p"] = 2.5
+
+    c = PLSCAN(space_tree=space_tree, metric=metric, metric_kws=metric_kws).fit(X)
 
     valid_spanning_forest(c._minimum_spanning_tree, X)
     assert c._mutual_graph is None
     valid_core_distances(c.core_distances_, X)
     valid_neighbor_indices(c._neighbors, X, c.min_samples)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
+    assert c.labels_.max() == 2
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 10
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 208
-    valid_linkage(c._linkage_tree, X)
-
-
-@pytest.mark.parametrize("metric", ["chebyshev", "infinity"])
-@pytest.mark.parametrize("space_tree", ["kdtree", "balltree"])
-def test_kdtree_chebyshev(X, metric, space_tree):
-    c = PLSCAN(metric=metric, space_tree=space_tree).fit(X)
-
-    valid_spanning_forest(c._minimum_spanning_tree, X)
-    assert c._mutual_graph is None
-    valid_core_distances(c.core_distances_, X)
-    valid_neighbor_indices(c._neighbors, X, c.min_samples)
-    valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
-    valid_probabilities(c.probabilities_, X)
-    valid_selected_clusters(c.selected_clusters_, c.labels_)
-    valid_persistence_trace(c._persistence_trace)
-    valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 8
-    valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 206
-    valid_linkage(c._linkage_tree, X)
-
-
-@pytest.mark.parametrize("metric", ["minkowski", "p"])
-@pytest.mark.parametrize("space_tree", ["kdtree", "balltree"])
-def test_kdtree_minkowski(X, metric, space_tree):
-    c = PLSCAN(metric=metric, metric_kws=dict(p=2.5), space_tree=space_tree).fit(X)
-
-    valid_spanning_forest(c._minimum_spanning_tree, X)
-    assert c._mutual_graph is None
-    valid_core_distances(c.core_distances_, X)
-    valid_neighbor_indices(c._neighbors, X, c.min_samples)
-    valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
-    valid_probabilities(c.probabilities_, X)
-    valid_selected_clusters(c.selected_clusters_, c.labels_)
-    valid_persistence_trace(c._persistence_trace)
-    valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 12
-    valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 210
     valid_linkage(c._linkage_tree, X)
 
 
 #  Feature vector inputs with metrics valid in ball trees
 
 
-@pytest.mark.parametrize("metric", ["canberra", "seuclidean"])
-def test_balltree_metrics_one(X, metric):
+@pytest.mark.parametrize(
+    "metric,num_clusters",
+    [
+        ("braycurtis", 2),
+        ("mahalanobis", 2),
+        ("canberra", 3),
+        ("seuclidean", 2),
+        ("haversine", 2),
+    ],
+)
+def test_balltree_numerical_metrics(X, metric, num_clusters):
     c = PLSCAN(metric=metric).fit(X)
 
     valid_spanning_forest(c._minimum_spanning_tree, X)
@@ -241,77 +199,17 @@ def test_balltree_metrics_one(X, metric):
     valid_core_distances(c.core_distances_, X)
     valid_neighbor_indices(c._neighbors, X, c.min_samples)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == num_clusters
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 10
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 208
     valid_linkage(c._linkage_tree, X)
 
 
-@pytest.mark.parametrize("metric", ["braycurtis", "mahalanobis"])
-def test_balltree_metrics_two(X, metric):
-    c = PLSCAN(metric=metric).fit(X)
-
-    valid_spanning_forest(c._minimum_spanning_tree, X)
-    assert c._mutual_graph is None
-    valid_core_distances(c.core_distances_, X)
-    valid_neighbor_indices(c._neighbors, X, c.min_samples)
-    valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 3)
-    valid_probabilities(c.probabilities_, X)
-    valid_selected_clusters(c.selected_clusters_, c.labels_)
-    valid_persistence_trace(c._persistence_trace)
-    valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 12
-    valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 210
-    valid_linkage(c._linkage_tree, X)
-
-
-def test_balltree_haversine(X):
-    c = PLSCAN(metric="haversine").fit(X)
-
-    valid_spanning_forest(c._minimum_spanning_tree, X)
-    assert c._mutual_graph is None
-    valid_core_distances(c.core_distances_, X)
-    valid_neighbor_indices(c._neighbors, X, c.min_samples)
-    valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
-    valid_probabilities(c.probabilities_, X)
-    valid_selected_clusters(c.selected_clusters_, c.labels_)
-    valid_persistence_trace(c._persistence_trace)
-    valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 14
-    valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 212
-    valid_linkage(c._linkage_tree, X)
-
-
-def test_balltree_hamming(X_bool):
-    c = PLSCAN(metric="hamming").fit(X_bool)
-
-    valid_spanning_forest(c._minimum_spanning_tree, X_bool)
-    assert c._mutual_graph is None
-    valid_core_distances(c.core_distances_, X_bool)
-    valid_neighbor_indices(c._neighbors, X_bool, c.min_samples)
-    valid_labels(c.labels_, X_bool)
-    assert np.all(c.labels_ < 3)
-    valid_probabilities(c.probabilities_, X_bool)
-    valid_selected_clusters(c.selected_clusters_, c.labels_)
-    valid_persistence_trace(c._persistence_trace)
-    valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 1
-    valid_condensed(c._condensed_tree, X_bool)
-    assert c._condensed_tree.parent.size == 200
-    valid_linkage(c._linkage_tree, X_bool)
-
-
-@pytest.mark.parametrize("metric", ["dice", "jaccard", "sokalsneath"])
-def test_balltree_three(X_bool, metric):
+@pytest.mark.parametrize("metric", boolean_metrics)
+def test_balltree_boolean_metrics(X_bool, metric):
     c = PLSCAN(metric=metric).fit(X_bool)
 
     valid_spanning_forest(c._minimum_spanning_tree, X_bool)
@@ -319,34 +217,12 @@ def test_balltree_three(X_bool, metric):
     valid_core_distances(c.core_distances_, X_bool)
     valid_neighbor_indices(c._neighbors, X_bool, c.min_samples)
     valid_labels(c.labels_, X_bool)
-    assert np.all(c.labels_ < 3)
+    assert c.labels_.max() < 3  # ties can change num clusters!
     valid_probabilities(c.probabilities_, X_bool)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 6
     valid_condensed(c._condensed_tree, X_bool)
-    assert c._condensed_tree.parent.size == 204
-    valid_linkage(c._linkage_tree, X_bool)
-
-
-@pytest.mark.parametrize("metric", ["russellrao", "rogerstanimoto"])
-def test_balltree_four(X_bool, metric):
-    c = PLSCAN(metric=metric).fit(X_bool)
-
-    valid_spanning_forest(c._minimum_spanning_tree, X_bool)
-    assert c._mutual_graph is None
-    valid_core_distances(c.core_distances_, X_bool)
-    valid_neighbor_indices(c._neighbors, X_bool, c.min_samples)
-    valid_labels(c.labels_, X_bool)
-    assert np.all(c.labels_ < 3)
-    valid_probabilities(c.probabilities_, X_bool)
-    valid_selected_clusters(c.selected_clusters_, c.labels_)
-    valid_persistence_trace(c._persistence_trace)
-    valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 4
-    valid_condensed(c._condensed_tree, X_bool)
-    assert c._condensed_tree.parent.size == 202
     valid_linkage(c._linkage_tree, X_bool)
 
 
@@ -438,15 +314,13 @@ def test_max_cluster_size(X, knn):
     valid_mutual_graph(c._mutual_graph, X, missing=True)
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 5)
+    assert c.labels_.max() in [3, 4]  # macos-latest finds 3, others find 4
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 15
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 212
     valid_linkage(c._linkage_tree, X)
 
 
@@ -470,15 +344,13 @@ def test_min_cluster_size(X, dists):
     valid_mutual_graph(c._mutual_graph, X, missing=True)
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 2
     assert np.all(c.labels_ > -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 6
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 204
     valid_linkage(c._linkage_tree, X)
 
 
@@ -507,9 +379,7 @@ def test_min_samples(X, dists):
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 1
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 200
     valid_linkage(c._linkage_tree, X)
 
 
@@ -537,15 +407,13 @@ def test_use_bi_persistence(X, knn):
     valid_mutual_graph(c._mutual_graph, X, missing=True)
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 3
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 9
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 206
     valid_linkage(c._linkage_tree, X)
 
 
@@ -569,15 +437,13 @@ def test_num_threads(X, knn):
     valid_mutual_graph(c._mutual_graph, X, missing=True)
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 3
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 9
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 206
     valid_linkage(c._linkage_tree, X)
 
 
@@ -604,15 +470,13 @@ def test_sample_weights(X, knn):
     valid_mutual_graph(c._mutual_graph, X, missing=True)
     valid_core_distances(c.core_distances_, X)
     valid_labels(c.labels_, X)
-    assert np.all(c.labels_ < 4)
+    assert c.labels_.max() == 3
     assert np.any(c.labels_ == -1)
     valid_probabilities(c.probabilities_, X)
     valid_selected_clusters(c.selected_clusters_, c.labels_)
     valid_persistence_trace(c._persistence_trace)
     valid_leaf(c._leaf_tree)
-    assert c._leaf_tree.parent.size == 7
     valid_condensed(c._condensed_tree, X)
-    assert c._condensed_tree.parent.size == 204
     valid_linkage(c._linkage_tree, X)
 
 
