@@ -6,6 +6,7 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import NearestNeighbors
 from sklearn.neighbors._kd_tree import KDTree32
 from sklearn.neighbors._ball_tree import BallTree32
+
 # from sklearn.preprocessing import StandardScaler
 # from sklearn.datasets import make_blobs
 # from sklearn.utils import shuffle

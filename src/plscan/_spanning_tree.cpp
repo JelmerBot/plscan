@@ -508,7 +508,7 @@ space_tree_boruvka_fun_t get_balltree_executor(char const *const metric) {
   if (auto const it = lookup.find(parse_metric(metric)); it != lookup.end())
     return it->second;
 
-  throw nb::value_error(
+  throw nb::value_error(  //
       nb::str("Unsupported metric for BallTree query: {}")
           .format(metric)
           .c_str()

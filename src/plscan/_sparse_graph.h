@@ -62,7 +62,8 @@ struct SparseGraph {
         indices(
             to_array(view.indices, std::move(cap.indices), view.indices.size())
         ),
-        indptr(to_array(view.indptr, std::move(cap.indptr), view.indptr.size())
+        indptr(  //
+            to_array(view.indptr, std::move(cap.indptr), view.indptr.size())
         ) {}
 
   // Allocate a knn graph to fill later.
