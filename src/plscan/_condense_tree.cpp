@@ -64,8 +64,9 @@ struct CondenseState {
     return std::make_pair(idx, cluster_count);
   }
 
-  [[nodiscard]] RowInfo get_row(size_t const node_idx, size_t const num_points)
-      const {
+  [[nodiscard]] RowInfo get_row(  //
+      size_t const node_idx, size_t const num_points
+  ) const {
     uint32_t const left = linkage_tree.parent[node_idx];
     uint32_t const right = linkage_tree.child[node_idx];
     return {
@@ -241,7 +242,9 @@ NB_MODULE(_condense_tree, m) {
                 nb::cast<array_ref<uint32_t const>>(asarray(child), false),
                 nb::cast<array_ref<float const>>(asarray(distance), false),
                 nb::cast<array_ref<float const>>(asarray(child_size), false),
-                nb::cast<array_ref<uint32_t const>>(asarray(cluster_rows), false)
+                nb::cast<array_ref<uint32_t const>>(
+                    asarray(cluster_rows), false
+                )
             );
           },
           nb::arg("parent"), nb::arg("child"), nb::arg("distance"),

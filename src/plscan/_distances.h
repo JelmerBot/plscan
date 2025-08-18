@@ -2,10 +2,10 @@
 #define PLSCAN_API_DISTANCES_H
 
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <span>
 #include <vector>
-#include <cstring>
 
 #include "_array.h"
 
@@ -260,10 +260,10 @@ auto get_rdist(nb::dict const metric_kws) {
                std::span<float const> const a, std::span<float const> const b
            ) { return rdist<metric>(a, b, p); };
   else if constexpr (metric == Metric::SEuclidean)
-    return [V = to_view(nb::cast<array_ref<float const>>(metric_kws["V"], false)
-            )](std::span<float const> const a, std::span<float const> const b) {
-      return rdist<Metric::SEuclidean>(a, b, V);
-    };
+    return  //
+        [V = to_view(nb::cast<array_ref<float const>>(metric_kws["V"], false))](
+            std::span<float const> const a, std::span<float const> const b
+        ) { return rdist<Metric::SEuclidean>(a, b, V); };
   else if constexpr (metric == Metric::Mahalanobis)
     return
         [VI = nb::cast<ndarray_ref<float const, 2>>(metric_kws["VI"]).view()](

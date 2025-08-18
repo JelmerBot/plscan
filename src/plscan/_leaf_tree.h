@@ -71,7 +71,8 @@ struct LeafTree {
 
   // C++ side constructor.
   LeafTree(LeafTreeWriteView const view, LeafTreeCapsule cap)
-      : parent(to_array(view.parent, std::move(cap.parent), view.parent.size())
+      : parent(  //
+            to_array(view.parent, std::move(cap.parent), view.parent.size())
         ),
         min_distance(to_array(
             view.min_distance, std::move(cap.min_distance),

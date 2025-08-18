@@ -53,7 +53,6 @@ struct CondensedTree {
   CondensedTree &operator=(CondensedTree &&) = default;
   CondensedTree &operator=(CondensedTree const &) = default;
 
-
   // Python side constructor.
   CondensedTree(
       array_ref<uint32_t const> const parent,

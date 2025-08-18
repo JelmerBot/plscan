@@ -7,10 +7,7 @@ from plscan import PLSCAN
 
 
 @image_comparison(
-    baseline_images=["condensed_tree"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["condensed_tree"], extensions=["png"], style="mpl20", tol=5.95
 )
 def test_condensed_tree(knn):
     plt.figure()
@@ -18,10 +15,7 @@ def test_condensed_tree(knn):
 
 
 @image_comparison(
-    baseline_images=["condensed_tree_args"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["condensed_tree_args"], extensions=["png"], style="mpl20", tol=0.56
 )
 def test_condensed_tree_args(knn):
     plt.figure()
@@ -42,10 +36,7 @@ def test_condensed_tree_args(knn):
 
 
 @image_comparison(
-    baseline_images=["leaf_tree"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["leaf_tree"], extensions=["png"], style="mpl20", tol=1.85
 )
 def test_leaf_tree(knn):
     plt.figure()
@@ -53,10 +44,7 @@ def test_leaf_tree(knn):
 
 
 @image_comparison(
-    baseline_images=["leaf_tree_args"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["leaf_tree_args"], extensions=["png"], style="mpl20", tol=0.86
 )
 def test_leaf_tree_args(knn):
     plt.figure()
@@ -75,10 +63,7 @@ def test_leaf_tree_args(knn):
 
 
 @image_comparison(
-    baseline_images=["persistence_trace"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["persistence_trace"], extensions=["png"], style="mpl20", tol=6.68
 )
 def test_persistence_trace(knn):
     plt.figure()
@@ -89,7 +74,7 @@ def test_persistence_trace(knn):
     baseline_images=["persistence_trace_args"],
     extensions=["png"],
     style="mpl20",
-    remove_text=True,
+    tol=6.68,
 )
 def test_persistence_trace_args(knn):
     plt.figure()

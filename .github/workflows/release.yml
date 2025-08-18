@@ -1,0 +1,23 @@
+name: release
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build_wheels:
+    uses: ./.github/workflows/_build_wheels.yml
+    secrets: inherit
+
+  make_release:
+    needs: build_wheels
+    uses: ./.github/workflows/_make_release.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      id-token: write

@@ -19,7 +19,6 @@ dependencies = [
     "matplotlib>=3,<4",
     "scikit-learn>=1.6,<2",
 ]
-optional-dependencies = { tests = ["pytest", "networkx", "pandas"] }
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: C++",
@@ -34,6 +33,9 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Natural Language :: English",
 ]
+
+[project.optional-dependencies]
+tests = ["pytest", "networkx", "pandas"]
 
 [project.urls]
 Documentation = "https://JelmerBot.github.io/plscan"
@@ -51,18 +53,9 @@ metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 write_to = "src/plscan/_version.py"
 
 [tool.cibuildwheel]
-archs = ["native"]
-build-verbosity = 1
 test-extras = ["tests"]
 test-sources = ["tests"]
-test-command = ["pytest . -k \"not test_plots\""]
-test-skip = [
-    "*musllinux*", # tests pass(ed) but slow due to no scikit-learn wheels
-    "*314*",       # untested, can't install scikit-learn, no wheels (yet)
-]
-skip = [
-    "*314t-macos*", # nanobind compile issue
-]
+test-command = ["pytest ."]
 
 [tool.cibuildwheel.windows]
 before-build = "pip install delvewheel"
