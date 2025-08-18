@@ -1,6 +1,7 @@
 .idea/
 dist/
 build/
+_build/
 wheelhouse/
 cmake-build*/
 *.pytest_cache/

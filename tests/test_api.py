@@ -18,7 +18,7 @@ from .conftest import numerical_balltree_metrics, duplicate_metrics, boolean_met
 from .checks import *
 
 
-@pytest.mark.parametrize("space_tree", ["auto", "kdtree", "balltree"])
+@pytest.mark.parametrize("space_tree", ["auto", "kd_tree", "ball_tree"])
 def test_one_component(X, space_tree):
     mst, neighbors, cd = compute_mutual_spanning_tree(X, space_tree=space_tree)
     (
@@ -106,8 +106,8 @@ def test_node_data_conversion(kdtree):
 
 @pytest.mark.parametrize(
     "space_tree,metric",
-    [("kdtree", m) for m in set(PLSCAN.valid_kdtree_metrics) - duplicate_metrics]
-    + [("balltree", m) for m in numerical_balltree_metrics - duplicate_metrics],
+    [("kd_tree", m) for m in set(PLSCAN.valid_kdtree_metrics) - duplicate_metrics]
+    + [("ball_tree", m) for m in numerical_balltree_metrics - duplicate_metrics],
 )
 def test_space_tree_query(X, space_tree, metric):
     # Fill in defaults for parameterized metrics
@@ -119,7 +119,7 @@ def test_space_tree_query(X, space_tree, metric):
     elif metric == "mahalanobis":
         metric_kws["VI"] = np.linalg.inv(np.cov(X, rowvar=False))
 
-    if space_tree == "kdtree":
+    if space_tree == "kd_tree":
         tree = KDTree32(X, metric=metric, **metric_kws)
         query_fun = kdtree_query
     else:

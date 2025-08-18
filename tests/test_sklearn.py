@@ -155,7 +155,7 @@ def test_sparse_matrix(X, g_knn):
 
 
 @pytest.mark.parametrize("metric", PLSCAN.valid_kdtree_metrics)
-@pytest.mark.parametrize("space_tree", ["kdtree", "balltree"])
+@pytest.mark.parametrize("space_tree", ["kd_tree", "ball_tree"])
 def test_kdtree_l1_l2(X, metric, space_tree):
     # Fill in defaults for parameterized metrics
     metric_kws = dict()
@@ -231,8 +231,8 @@ def test_balltree_boolean_metrics(X_bool, metric):
 
 @pytest.mark.parametrize(
     "space_tree,metric",
-    [("kdtree", m) for m in PLSCAN.valid_kdtree_metrics]
-    + [("balltree", m) for m in numerical_balltree_metrics],
+    [("kd_tree", m) for m in PLSCAN.valid_kdtree_metrics]
+    + [("ball_tree", m) for m in numerical_balltree_metrics],
 )
 def test_equal_core_distances(X, space_tree, metric):
     if metric == "braycurtis":
@@ -277,7 +277,7 @@ def test_bad_space_tree(X):
         PLSCAN(space_tree="bla").fit(X)
     for metric in set(PLSCAN.valid_balltree_metrics) - set(PLSCAN.valid_kdtree_metrics):
         with pytest.raises(InvalidParameterError):
-            PLSCAN(space_tree="kdtree", metric=metric).fit(X)
+            PLSCAN(space_tree="kd_tree", metric=metric).fit(X)
 
 
 def test_bad_metrics(X):

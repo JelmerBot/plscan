@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.sparse import issparse, csr_array, coo_array
+from scipy.sparse import issparse, csr_array
 from scipy.signal import find_peaks
 from scipy.spatial.distance import squareform
 from sklearn.base import BaseEstimator, ClusterMixin
@@ -22,7 +22,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
     it computes the total leaf-cluster persistence per minimum cluster size, and
     picks the minimum cluster size that maximizes that score.
 
-    The leaf-cluster hierarch in `leaf_tree_` can be plotted as an alternative
+    The leaf-cluster hierarchy in `leaf_tree_` can be plotted as an alternative
     to HDBSCAN*'s condensed cluster tree.
 
     Cluster segmentations for other high-persistence minimum cluster sizes can
@@ -37,18 +37,22 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         profiles with fewer peaks. Minimum spanning tree inputs are assumed to
         contain mutual reachability distances and ignore this parameter.
     space_tree : str, default="auto"
-        The type of tree to use for the search. Options are "auto", "kdtree" and
-        "balltree". If "auto", a "kdtree" is used if that supports the selected
+        The type of tree to use for the search. Options are "auto", "kd_tree" and
+        "ball_tree". If "auto", a "kd_tree" is used if that supports the selected
         metric. Space trees are not used when `metric` is "precomputed".
     metric : str, default="euclidean"
         The distance metric to use. Default is "euclidean". Valid options for
         kd-trees are:
+
             "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
             "infinity", "minkowski", "p".
+
         Additional valid options for ball-trees are:
+
             "seuclidean", "hamming", "braycurtis", "canberra", "haversine",
             "mahalanobis", "dice", "jaccard", "russellrao", "rogerstanimoto",
             "sokalsneath".
+
         Use "precomputed" if the input to `.fit()` contains distances. See
         sklearn documentation for metric definitions.
     metric_kws : dict | None, default is None
@@ -109,7 +113,6 @@ class PLSCAN(ClusterMixin, BaseEstimator):
        Density-based clustering based on hierarchical density estimates. In
        Pacific-Asia Conference on Knowledge Discovery and Data Mining (pp.
        160-172). Springer Berlin Heidelberg.
-
     """
 
     valid_kdtree_metrics = [
@@ -139,7 +142,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
     _parameter_constraints = dict(
         min_samples=[Interval(Integral, 2, None, closed="left")],
-        space_tree=[StrOptions({"auto", "kdtree", "balltree"})],
+        space_tree=[StrOptions({"auto", "kd_tree", "ball_tree"})],
         metric=[StrOptions({*valid_balltree_metrics, "precomputed"})],
         min_cluster_size=[None, Interval(Real, 2.0, None, closed="left")],
         max_cluster_size=[Interval(Real, 2.0, None, closed="right")],
@@ -267,11 +270,11 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         if self.metric != "precomputed":
             if self.space_tree == "auto":
                 space_tree = (
-                    "kdtree" if self.metric in KDTree.valid_metrics else "balltree"
+                    "kd_tree" if self.metric in KDTree.valid_metrics else "ball_tree"
                 )
             else:
                 space_tree = self.space_tree
-                tree = KDTree if space_tree == "kdtree" else BallTree
+                tree = KDTree if space_tree == "kd_tree" else BallTree
                 if self.metric not in tree.valid_metrics:
                     raise InvalidParameterError(
                         f"Invalid metric '{self.metric}' for {space_tree}"

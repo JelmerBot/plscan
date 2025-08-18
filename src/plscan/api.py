@@ -32,7 +32,7 @@ def compute_mutual_spanning_tree(
     data,
     *,
     min_samples: int = 5,
-    space_tree: str = "kdtree",
+    space_tree: str = "kd_tree",
     metric: str = "euclidean",
     metric_kws: dict | None = None,
 ):
@@ -45,21 +45,25 @@ def compute_mutual_spanning_tree(
     data : np.ndarray[tuple(int, int), np.dtype[np.float32]]
         High dimensional data features. Values must be finite and not missing.
     space_tree : str
-        The type of spatial tree to use. Default is "kdtree". Valid options are:
-        "kdtree", "balltree". See `metric` for an overview of supported metrics
-        on each tree type.
+        The type of spatial tree to use. Default is "kd_tree". Valid options
+        are: "kd_tree", "ball_tree". See `metric` for an overview of supported
+        metrics on each tree type.
     min_samples : int, optional
         Core distances are the distance to the `min_samples`-th nearest
         neighbor. Default is 5.
     metric : str
         The distance metric to use. Default is "euclidean". Valid options for
         kd-trees are:
+
             "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
             "infinity", "minkowski", "p".
+
         Additional valid options for ball-trees are:
+        
             "seuclidean", "hamming", "braycurtis", "canberra", "haversine",
             "mahalanobis", "dice", "jaccard", "russellrao", "rogerstanimoto",
             "sokalsneath".
+
         See sklearn documentation for metric definitions.
     metric_kws : dict | None
         Additional keyword arguments for the distance metric. Default is None.
@@ -75,7 +79,7 @@ def compute_mutual_spanning_tree(
     elif metric == "mahalanobis" and "VI" not in metric_kws:
         metric_kws["VI"] = np.linalg.inv(np.cov(data, rowvar=False))
 
-    if space_tree == "kdtree":
+    if space_tree == "kd_tree":
         tree = KDTree32(data, metric=metric, **metric_kws)
         query_fun = kdtree_query
         spanning_tree_fun = compute_spanning_tree_kdtree
@@ -340,6 +344,10 @@ def remove_self_loops(graph: csr_array):
         The input sparse graph with self-loops removed.
     """
     # Remove self-loops
+    diag = graph.diagonal().nonzero()
+    graph[diag, diag] = 0.0
+    graph.eliminate_zeros()
+    
     graph = csr_array(
         (
             graph.data.astype(np.float32),
@@ -348,7 +356,4 @@ def remove_self_loops(graph: csr_array):
         ),
         shape=graph.shape,
     )
-    diag = graph.diagonal().nonzero()
-    graph[diag, diag] = 0.0
-    graph.eliminate_zeros()
     return graph

@@ -20,12 +20,13 @@ class CondensedTree(object):
 
     Parameters
     ----------
+
     leaf_tree : plscan.api.LeafTree
         The leaf tree namedtuple as produced internally.
     condensed_tree : plscan.api.CondensedTree
         The condensed tree namedtuple as produced internally.
-    selected_clusters : np.ndarray[tuple[int,...], np.dtype[np.int64]]
-        The condensed tree parent IDS for the selected clusters.
+    selected_clusters : np.ndarray[tuple[int,...], np.dtype[np.uint32]]
+        The condensed tree parent IDs for the selected clusters.
     num_points : int
         The number of points in the condensed tree.
     """
@@ -34,7 +35,7 @@ class CondensedTree(object):
         self,
         leaf_tree: api.LeafTree,
         condensed_tree: api.CondensedTree,
-        selected_clusters: np.ndarray[tuple[int, ...], np.dtype[np.int64]],
+        selected_clusters: np.ndarray[tuple[int, ...], np.dtype[np.uint32]],
         num_points: int,
     ):
         self._leaf_tree = leaf_tree
@@ -58,8 +59,8 @@ class CondensedTree(object):
         children should be considered a child of the phantom root.
         """
         dtype = [
-            ("parent", np.uint64),
-            ("child", np.uint64),
+            ("parent", np.uint32),
+            ("child", np.uint32),
             ("distance", np.float32),
             ("child_size", np.float32),
         ]
@@ -164,6 +165,7 @@ class CondensedTree(object):
 
         Parameters
         ----------
+        
         leaf_separation : float, optional
             A spacing parameter for icicle positioning.
         cmap : str, optional
@@ -216,9 +218,12 @@ class CondensedTree(object):
         x_coords = self._x_coords(parents) * leaf_separation
         if not distance_ranks:
             death_dist = self._leaf_tree.max_distance
+            birth_dist = self._leaf_tree.min_distance
         else:
             death_dist = np.full(parents.shape, distances[0], dtype=np.float32)
             death_dist[cluster_tree.child - self._num_points] = cluster_tree.distance
+            birth_dist = np.empty(parents.shape, dtype=np.float32)
+            birth_dist[self._tree.parent - self._num_points] = distances
 
         order = np.argsort(self._tree.parent, kind="stable")
         if log_size:
@@ -306,8 +311,8 @@ class CondensedTree(object):
                 if (
                     label_clusters or select_clusters
                 ) and segment_idx in self._chosen_segments:
-                    max_dist = self._leaf_tree.max_distance[segment_idx]
-                    min_dist = self._leaf_tree.min_distance[segment_idx]
+                    max_dist = death_dist[segment_idx]
+                    min_dist = birth_dist[segment_idx]
                     size = size_trace[0]
                     width = size / max_size
                     height = max_dist - min_dist
@@ -412,7 +417,7 @@ class CondensedTree(object):
         return dist_trace, size_trace
 
     @classmethod
-    def _x_coords(self, parents: np.ndarray[tuple[int], np.dtype[np.uint64]]):
+    def _x_coords(self, parents: np.ndarray[tuple[int], np.dtype[np.uint32]]):
         """Get the x-coordinates of the segments in the condensed tree."""
         children = dict()
         for child_idx, parent_idx in enumerate(parents[1:], 1):
@@ -433,12 +438,13 @@ class LeafTree(object):
 
     Parameters
     ----------
+
     leaf_tree : plscan.api.LeafTree
         The leaf tree namedtuple as produced internally.
     condensed_tree : plscan.api.CondensedTree
         The condensed tree namedtuple as produced internally.
-    selected_clusters : np.ndarray[tuple[int, ...], np.dtype[np.int64]]
-        The leaf tree parent IDS for the selected clusters.
+    selected_clusters : np.ndarray[tuple[int, ...], np.dtype[np.uint32]]
+        The leaf tree parent IDs for the selected clusters.
     persistence_trace : plscan.api.PersistenceTrace
         The persistence trace for the leaf tree.
     _num_points : int
@@ -449,7 +455,7 @@ class LeafTree(object):
         self,
         leaf_tree: api.LeafTree,
         condensed_tree: api.CondensedTree,
-        selected_clusters: np.ndarray[tuple[int, ...], np.dtype[np.int64]],
+        selected_clusters: np.ndarray[tuple[int, ...], np.dtype[np.uint32]],
         persistence_trace: api.PersistenceTrace,
         num_points: int,
     ):
@@ -478,7 +484,7 @@ class LeafTree(object):
         leaves. If `max_size` <= `min_size`, the cluster is not a leaf.
         """
         dtype = [
-            ("parent", np.uint64),
+            ("parent", np.uint32),
             ("min_distance", np.float32),
             ("max_distance", np.float32),
             ("min_size", np.float32),
@@ -603,6 +609,7 @@ class LeafTree(object):
 
         Parameters
         ----------
+        
         leaf_separation : float, optional
             A spacing parameter for icicle positioning.
         cmap : str, optional
@@ -832,7 +839,7 @@ class LeafTree(object):
         sizes = [s[:i] for s, i in zip(sizes, upper_idx)]
         return sizes, stabilities
 
-    def _x_coords(self, parents: np.ndarray[tuple[int], np.dtype[np.uint64]]):
+    def _x_coords(self, parents: np.ndarray[tuple[int], np.dtype[np.uint32]]):
         """Get the x-coordinates of the segments in the condensed tree."""
         children = dict()
         for child_idx, parent_idx in enumerate(parents[1:], 1):
@@ -877,6 +884,7 @@ class PersistenceTrace(object):
 
     Parameters
     ----------
+
     trace : plscan.api.PersistenceTrace
         The total persistence trace as produced internally.
     """
@@ -932,6 +940,7 @@ class PersistenceTrace(object):
 
         Parameters
         ----------
+        
         line_kws : dict, optional
             Additional keyword arguments for the line plot. Defaults to None.
         """
@@ -946,5 +955,5 @@ class PersistenceTrace(object):
             **line_kws,
         )
         plt.ylim([0, plt.ylim()[1]])
-        plt.xlabel("Birth size in (birth, death]")
+        plt.xlabel("Cluster birth size in (birth, death]")
         plt.ylabel("Total persistence")
