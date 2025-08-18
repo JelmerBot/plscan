@@ -6,29 +6,14 @@ from matplotlib.testing.decorators import image_comparison
 from plscan import PLSCAN
 
 
-def remove_labels_and_titles():
-    plt.xlabel("")
-    plt.ylabel("")
-    plt.title("")
-
-
-@image_comparison(
-    baseline_images=["condensed_tree"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
-)
+@image_comparison(baseline_images=["condensed_tree"], extensions=["png"], style="mpl20")
 def test_condensed_tree(knn):
     plt.figure()
     PLSCAN(metric="precomputed").fit(knn).condensed_tree_.plot()
-    remove_labels_and_titles()
 
 
 @image_comparison(
-    baseline_images=["condensed_tree_args"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["condensed_tree_args"], extensions=["png"], style="mpl20"
 )
 def test_condensed_tree_args(knn):
     plt.figure()
@@ -46,27 +31,15 @@ def test_condensed_tree_args(knn):
         colorbar_kws=dict(fraction=0.01),
         label_kws=dict(color="red"),
     )
-    remove_labels_and_titles()
 
 
-@image_comparison(
-    baseline_images=["leaf_tree"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
-)
+@image_comparison(baseline_images=["leaf_tree"], extensions=["png"], style="mpl20")
 def test_leaf_tree(knn):
     plt.figure()
     PLSCAN(metric="precomputed").fit(knn).leaf_tree_.plot()
-    remove_labels_and_titles()
 
 
-@image_comparison(
-    baseline_images=["leaf_tree_args"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
-)
+@image_comparison(baseline_images=["leaf_tree_args"], extensions=["png"], style="mpl20")
 def test_leaf_tree_args(knn):
     plt.figure()
     PLSCAN(metric="precomputed").fit(knn).leaf_tree_.plot(
@@ -81,30 +54,21 @@ def test_leaf_tree_args(knn):
         colorbar_kws=dict(fraction=0.01),
         label_kws=dict(color="red"),
     )
-    remove_labels_and_titles()
 
 
 @image_comparison(
-    baseline_images=["persistence_trace"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["persistence_trace"], extensions=["png"], style="mpl20"
 )
 def test_persistence_trace(knn):
     plt.figure()
     PLSCAN(metric="precomputed").fit(knn).persistence_trace_.plot()
-    remove_labels_and_titles()
 
 
 @image_comparison(
-    baseline_images=["persistence_trace_args"],
-    extensions=["png"],
-    style="mpl20",
-    remove_text=True,
+    baseline_images=["persistence_trace_args"], extensions=["png"], style="mpl20"
 )
 def test_persistence_trace_args(knn):
     plt.figure()
     PLSCAN(metric="precomputed").fit(knn).persistence_trace_.plot(
         line_kws=dict(color="black", linewidth=0.5)
     )
-    remove_labels_and_titles()

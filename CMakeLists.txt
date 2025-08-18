@@ -42,7 +42,7 @@ message(STATUS "Creating a ${CMAKE_BUILD_TYPE} build")
 
 # - Find packages
 find_package(OpenMP REQUIRED CXX)
-find_package(Python 3.8
+find_package(Python 3.10
         REQUIRED COMPONENTS Interpreter Development.Module
         OPTIONAL_COMPONENTS Development.SABIModule)
 execute_process(
