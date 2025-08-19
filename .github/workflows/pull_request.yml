@@ -30,3 +30,20 @@ jobs:
     needs: run_linters
     uses: ./.github/workflows/_build_wheels.yml
     secrets: inherit
+
+  pr_status:
+    name: PR Status
+    runs-on: ubuntu-latest
+    needs: [run_linters, build_wheels]
+    if: always()
+    steps:
+      - name: Check Workflow Status
+        run: |
+          exit_on_result() {
+            if [[ "$2" == "failure" || "$2" == "cancelled" ]]; then
+              echo "Job '$1' failed or was cancelled."
+              exit 1
+            fi
+          }
+          exit_on_result "run_linters" "${{ needs.run_linters.result }}"
+          exit_on_result "build_wheels" "${{ needs.build_wheels.result }}"
