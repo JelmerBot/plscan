@@ -15,7 +15,9 @@ on:
       - 'README.md'
       - 'CMakeLists.txt'
       - 'pyproject.toml'
-      - '.github/workflows/build_wheels.yml'
+      - '.github/workflows/_build_wheels.yml'
+      - '.github/workflows/_run_linters.yml'
+      - '.github/workflows/pull_requests.yml'
 
 jobs:
   run_linters:
