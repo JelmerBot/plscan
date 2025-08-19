@@ -46,4 +46,3 @@ jobs:
         with:
           name: cibw-wheels-${{ matrix.platform }}_${{ matrix.arch }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
-      
