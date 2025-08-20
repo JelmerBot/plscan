@@ -39,10 +39,9 @@ tests = ["pytest", "networkx", "pandas"]
 docs = [
     "furo",
     "sphinx",
-    "sphinx-copybutton",
-    "numpydoc",
+    "pandoc",
     "nbsphinx",
-    "setuptools_scm",
+    "sphinx-copybutton",
 ]
 
 [project.urls]

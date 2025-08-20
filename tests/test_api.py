@@ -11,8 +11,7 @@ from plscan import (
     clusters_from_spanning_forest,
     compute_mutual_spanning_tree,
 )
-from plscan.api import SpaceTree, kdtree_query, balltree_query
-from plscan._space_tree import check_node_data
+from plscan.space_tree import SpaceTree, kdtree_query, balltree_query, check_node_data
 
 from .conftest import numerical_balltree_metrics, duplicate_metrics, boolean_metrics
 from .checks import *
@@ -106,7 +105,7 @@ def test_node_data_conversion(kdtree):
 
 @pytest.mark.parametrize(
     "space_tree,metric",
-    [("kd_tree", m) for m in set(PLSCAN.valid_kdtree_metrics) - duplicate_metrics]
+    [("kd_tree", m) for m in set(PLSCAN.VALID_KDTREE_METRICS) - duplicate_metrics]
     + [("ball_tree", m) for m in numerical_balltree_metrics - duplicate_metrics],
 )
 def test_space_tree_query(X, space_tree, metric):

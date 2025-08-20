@@ -1,3 +1,5 @@
+"""Public API of the plscan package."""
+
 from .api import (
     clusters_from_spanning_forest,
     extract_mutual_spanning_forest,

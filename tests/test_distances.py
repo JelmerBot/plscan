@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.metrics import pairwise_distances
 from sklearn.exceptions import DataConversionWarning
 
-import plscan._distances as pd
+import plscan.distances as pd
 
 from .conftest import numerical_balltree_metrics, duplicate_metrics, boolean_metrics
 

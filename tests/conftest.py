@@ -34,7 +34,7 @@ boolean_metrics = {
 # used to avoid duplicate tests where possible
 duplicate_metrics = {"p", "infinity", "manhattan", "l1", "l2"}
 # used to select which input the algorithm should use (X or X_bool)
-numerical_balltree_metrics = set(PLSCAN.valid_balltree_metrics) - boolean_metrics
+numerical_balltree_metrics = set(PLSCAN.VALID_BALLTREE_METRICS) - boolean_metrics
 
 
 def pytest_sessionstart(session):

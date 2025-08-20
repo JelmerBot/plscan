@@ -1,5 +1,6 @@
 .idea/
 dist/
+docs/reference_*/
 build/
 _build/
 wheelhouse/

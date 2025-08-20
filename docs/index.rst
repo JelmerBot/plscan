@@ -1,13 +1,25 @@
 .. toctree::
+   :caption: Features
    :maxdepth: 1
    :hidden:
 
-   basic_usage
-   advanced_usage
-   api_reference
+   using_basic_api
+   using_exploration_plots
+   using_other_distances
+   using_multiple_components
+   using_sample_weights
 
+.. toctree::
+   :caption: Development
+   :maxdepth: 1
+   :hidden:
+   
+   local_development
+   reference_plscan
+   reference_plots
+   reference_api
 
-|PyPI version| |Tests|
+|PyPI version|
 
 Persistent Leaves Spatial Clustering of Applications with Noise
 ===============================================================
@@ -15,10 +27,10 @@ Persistent Leaves Spatial Clustering of Applications with Noise
 This library provides a new clustering algorithm based on HDBSCAN. The primary
 advantages of PLSCAN over the standard ``hdbscan`` library are:
 
- * PLSCAN automatically finds the optimal minimum cluster size.
- * PLSCAN can easily use all available cores to speed up computation;
- * PLSCAN has much faster implementations of tree condensing and cluster extraction;
- * PLSCAN does not rely on JIT compilation.
+ - PLSCAN automatically finds the optimal minimum cluster size.
+ - PLSCAN can easily use all available cores to speed up computation;
+ - PLSCAN has much faster implementations of tree condensing and cluster extraction;
+ - PLSCAN does not rely on JIT compilation.
 
 When using PLSCAN, only the `min_samples` parameter has to be given, which
 specifies the number of neighbors used for mutual reachability distances. Higher
@@ -102,5 +114,4 @@ The ``plscan`` package has a 3-Clause BSD license.
 
 .. |PyPI version| image:: https://badge.fury.io/py/plscan.svg
    :target: https://badge.fury.io/py/plscan
-.. |Tests| image:: https://github.com/JelmerBot/plscan/actions/workflows/build_wheels.yml/badge.svg?branch=main
-   :target: https://github.com/JelmerBot/plscan/actions/workflows/build_wheels.yml
+

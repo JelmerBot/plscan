@@ -63,6 +63,8 @@ foreach (EXT_SOURCE ${EXT_SOURCES})
     cmake_path(RELATIVE_PATH EXT_DIR BASE_DIRECTORY ${SRC_PATH})
     set(EXT_STUB ${EXT_NAME}_stub)
     set(EXT_STUB_OUT ${EXT_NAME}.pyi)
+    set(EXT_DOCS_OUT ${EXT_NAME}_docs.py)
+    string(REGEX REPLACE "^_" "" EXT_MOD_OUT "${EXT_NAME}.py")
     set(EXT_DESTINATION ${SKBUILD_PROJECT_NAME}/${EXT_DIR})
     message(STATUS "Found extension: ${EXT_DESTINATION}${EXT_NAME}")
 
@@ -83,6 +85,28 @@ foreach (EXT_SOURCE ${EXT_SOURCES})
         PYTHON_PATH $<TARGET_FILE_DIR:${EXT_NAME}>
         DEPENDS ${EXT_NAME}
     )
+    # Runs postprocessing on the generated stub file!
+    add_custom_command(
+        OUTPUT 
+            ${CMAKE_CURRENT_BINARY_DIR}/${EXT_DOCS_OUT} 
+            ${CMAKE_CURRENT_BINARY_DIR}/${EXT_MOD_OUT}
+        COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/wrap_stubs.py
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${EXT_STUB_OUT}
+            ${EXT_DOCS_OUT}
+            ${EXT_MOD_OUT}
+            ${SKBUILD_PROJECT_NAME}
+        DEPENDS
+            ${CMAKE_CURRENT_BINARY_DIR}/${EXT_STUB_OUT}
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/wrap_stubs.py
+        VERBATIM
+    )
+   add_custom_target(${EXT_NAME}_docs ALL
+       DEPENDS
+           ${CMAKE_CURRENT_BINARY_DIR}/${EXT_DOCS_OUT}
+           ${CMAKE_CURRENT_BINARY_DIR}/${EXT_MOD_OUT}
+   )
     install(TARGETS ${EXT_NAME} LIBRARY DESTINATION ${EXT_DESTINATION})
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_STUB_OUT} DESTINATION ${EXT_DESTINATION})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_DOCS_OUT} DESTINATION ${EXT_DESTINATION})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_MOD_OUT} DESTINATION ${EXT_DESTINATION})
 endforeach ()

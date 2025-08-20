@@ -262,12 +262,28 @@ NB_MODULE(_persistence_trace, m) {
                 nb::cast<array_ref<float const>>(asarray(persistence), false)
             );
           },
-          nb::arg("min_size"), nb::arg("persistence")
+          nb::arg("min_size"), nb::arg("persistence"),
+          nb::sig("def __init__(self, min_size: np.ndarray, persistence: np.ndarray) -> None"),
+          R"(
+            Parameters
+            ----------
+            min_size
+                The minimum cluster sizes at which leaf-clusters start to exist.
+            persistence
+                The persistence sum for the leaf-clusters that exist at the
+                minimum cluster sizes.
+          )"
       )
-      .def_ro("min_size", &PersistenceTrace::min_size, nb::rv_policy::reference)
+      .def_ro(
+          "min_size", &PersistenceTrace::min_size, nb::rv_policy::reference,
+          nb::sig("def min_size(self) -> np.ndarray"),
+          "A 1D array with minimum cluster sizes (np.float32)."
+      )
       .def_ro(
           "persistence", &PersistenceTrace::persistence,
-          nb::rv_policy::reference
+          nb::rv_policy::reference,
+          nb::sig("def persistence(self) -> np.ndarray"),
+          "A 1D array with total persistence values (np.float32)."
       )
       .def(
           "__iter__",
@@ -285,32 +301,23 @@ NB_MODULE(_persistence_trace, m) {
             );
           }
       )
-      .doc() = R"(
-        PersistenceTrace lists the total persistence per min_cluster_size.
-
-        Parameters
-        ----------
-        min_size : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
-            The minimum cluster sizes at which leaf-clusters start to exist.
-        persistence : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The persistence sum for the leaf-clusters that exist at the
-            minimum cluster sizes.
-      )";
+      .doc() = "PersistenceTrace lists the persistences per min_cluster_size.";
 
   m.def(
       "compute_size_persistence", &compute_size_persistence,
       nb::arg("leaf_tree"),
+      nb::sig("def compute_size_persistence(leaf_tree: plscan.leaf_tree.LeafTree) -> PersistenceTrace"),
       R"(
         Computes the total min_cluster_size persistence trace.
 
         Parameters
         ----------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             The input leaf tree.
 
         Returns
         -------
-        persistence_trace : plscan._persistence_trace.PersistenceTrace
+        persistence_trace
             A PersistenceTrace containing arrays for the minimum cluster size
             and total persistence values. The min_size array contains all unique
             min_cluster_sizes at which clusters become leaves. The persistence
@@ -322,21 +329,22 @@ NB_MODULE(_persistence_trace, m) {
   m.def(
       "compute_bi_persistence", &compute_bi_persistence, nb::arg("leaf_tree"),
       nb::arg("condensed_tree"), nb::arg("num_points"),
+      nb::sig("def compute_bi_persistence(leaf_tree: plscan.leaf_tree.LeafTree, condensed_tree: plscan.condense_tree.CondensedTree, num_points: int) -> PersistenceTrace"),
       R"(
         Computes a leaf tree from a condensed tree.
 
         Parameters
         ----------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             The input leaf tree.
-        condensed_tree : plscan._condensed_tree.CondensedTree
+        condensed_tree
             The input condensed tree.
-        num_points : int
+        num_points
             The number of points in the condensed tree.
 
         Returns
         -------
-        persistence_trace : plscan._persistence_trace.PersistenceTrace
+        persistence_trace
             A PersistenceTrace containing arrays for the minimum cluster size
             and total persistence values. The min_size array contains all unique
             min_cluster_sizes at which clusters become leaves. The persistence
@@ -348,22 +356,23 @@ NB_MODULE(_persistence_trace, m) {
   m.def(
       "compute_stability_icicles", &compute_stability_icicles,
       nb::arg("leaf_tree"), nb::arg("condensed_tree"), nb::arg("num_points"),
+      nb::sig("def compute_stability_icicles(leaf_tree: plscan.leaf_tree.LeafTree, condensed_tree: plscan.condense_tree.CondensedTree, num_points: int) -> tuple[list[np.ndarray], list[np.ndarray]]"),
       R"(
         Computes the icicle size--stability trace for the LeafTree plot.
 
         Parameters
         ----------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             The input leaf tree.
-        condensed_tree : plscan._condensed_tree.CondensedTree
+        condensed_tree
             The input condensed tree.
-        num_points : int
+        num_points
             The number of points in the condensed tree.
         Returns
         -------
-        sizes : list[numpy.ndarray[tuple[int], np.dtype[np.float32]]]
+        sizes
             The icicle min cluster sizes (births in (birth, death])).
-        stabilities : list[numpy.ndarray[tuple[int], np.dtype[np.float32]]]
+        stabilities
             The icicle stabilities.
       )"
   );

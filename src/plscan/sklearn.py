@@ -9,18 +9,20 @@ from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import Interval, StrOptions, InvalidParameterError
 from sklearn.neighbors import KDTree, BallTree
 from numbers import Real, Integral
+from typing import Self, Any
 
 from . import api
 from . import plots
 
 
 class PLSCAN(ClusterMixin, BaseEstimator):
-    """
-    PLSCAN computes HDBSCAN* [1]_ leaf-clusters with an optimal minimum cluster
-    size. The algorithm builds a hierarchy of leaf-clusters, showing which
-    clusters are leaves as the minimum cluster size varies (filtration). Then,
-    it computes the total leaf-cluster persistence per minimum cluster size, and
-    picks the minimum cluster size that maximizes that score.
+    """PLSCAN computes HDBSCAN* leaf-clusters with an optimal minimum cluster
+    size.
+
+    The algorithm builds a hierarchy of leaf-clusters, showing which HDBSCAN*
+    [1]_ clusters are leaves as the minimum cluster size varies (filtration).
+    Then, it computes the total leaf-cluster persistence per minimum cluster
+    size, and picks the minimum cluster size that maximizes that score.
 
     The leaf-cluster hierarchy in `leaf_tree_` can be plotted as an alternative
     to HDBSCAN*'s condensed cluster tree.
@@ -29,83 +31,6 @@ class PLSCAN(ClusterMixin, BaseEstimator):
     be computed using the `cluster_layers` method. This method finds the
     persistence peaks and returns their cluster labels and memberships.
 
-    Parameters
-    ----------
-    min_samples : int, default=5
-        The number of neighbors to use for computing core distances and the
-        mutual reachability distances. Higher values produce smoother density
-        profiles with fewer peaks. Minimum spanning tree inputs are assumed to
-        contain mutual reachability distances and ignore this parameter.
-    space_tree : str, default="auto"
-        The type of tree to use for the search. Options are "auto", "kd_tree" and
-        "ball_tree". If "auto", a "kd_tree" is used if that supports the selected
-        metric. Space trees are not used when `metric` is "precomputed".
-    metric : str, default="euclidean"
-        The distance metric to use. Default is "euclidean". Valid options for
-        kd-trees are:
-
-            "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
-            "infinity", "minkowski", "p".
-
-        Additional valid options for ball-trees are:
-
-            "seuclidean", "hamming", "braycurtis", "canberra", "haversine",
-            "mahalanobis", "dice", "jaccard", "russellrao", "rogerstanimoto",
-            "sokalsneath".
-
-        Use "precomputed" if the input to `.fit()` contains distances. See
-        sklearn documentation for metric definitions.
-    metric_kws : dict | None, default is None
-        Additional keyword arguments for the distance metric. For example, `p`
-        for the Minkowski distance.
-    min_cluster_size : float, optional
-        The minimum size limit for clusters, defaults to the value of
-        min_samples. Values below min_samples are not allowed, as the
-        leaf-clusters produced by those values can be incomplete and arbitrary.
-    max_cluster_size : float, optional
-        The maximum size limit for clusters, by default np.inf.
-    use_bi_persistence : bool, optional
-        Whether to use total bi-persistence or total size-persistence for
-        selecting the optimal minimum cluster size. Default is False.
-    num_threads : int, optional
-        The number of threads to use for parallel computations, value must be
-        positive. If None, OpenMP's default maximum thread count is used.
-        Default is None.
-
-    Attributes
-    ----------
-    labels_ : np.ndarray[tuple[int], np.dtype[np.int64]]
-        A 1D array of cluster labels for each point in the input data. spanning
-        tree.
-    probabilities_ : np.ndarray[tuple[int], np.dtype[np.float32]]
-        A 1D array of cluster labels for each point in the input data.
-    selected_clusters_ : np.ndarray[tuple[int], np.dtype[np.intp]]
-        The leaf tree indices of the selected clusters.
-    persistence_trace_ : plscan.plots.PersistenceTrace
-        A trace of the total (bi-)persistence per minimum cluster size. sizes
-        represent births in (birth, death] intervals.
-    leaf_tree_ : plscan.plots.LeafTree
-        The minimum cluster size leaf-cluster tree showing which condensed tree
-        segments are leaves at each minimum cluster size value. The object has
-        as plotting function and conversion methods for networkx, pandas, and
-        numpy.
-    condensed_tree_ : plscan.plots.CondensedTree
-        The condensed cluster tree showing which distance-contour clusters exist
-        in the data. The object has as plotting function and conversion methods
-        for networkx, pandas, and numpy.
-    single_linkage_tree_ : np.ndarray[tuple[int, int], np.dtype[np.float64]]
-        A single linkage dendrogram in scipy format. The first column represents
-        the link's parent, the second column represents the link's child, and
-        the third column represents the link's distance.
-    minimum_spanning_tree_ : np.ndarray[tuple[int, int], np.dtype[np.float64]]
-        A minimum spanning tree in scipy format. The first column represents the
-        edge's parent, the second column represents the edge's child, and the
-        third column represents the edge's distance. May be a spanning forest if
-        the input contained multiple connected components.
-    core_distances_ : np.ndarray[tuple[int], np.dtype[np.float32]]
-        The core distances for each point in the input data. These are the
-        distances to the `min_samples`-th nearest neighbor.
-
     References
     ----------
 
@@ -113,9 +38,19 @@ class PLSCAN(ClusterMixin, BaseEstimator):
        Density-based clustering based on hierarchical density estimates. In
        Pacific-Asia Conference on Knowledge Discovery and Data Mining (pp.
        160-172). Springer Berlin Heidelberg.
+
     """
 
-    valid_kdtree_metrics = [
+    labels_: np.ndarray[tuple[int], np.dtype[np.int64]] = None
+    """The computed cluster labels."""
+    probabilities_: np.ndarray[tuple[int], np.dtype[np.float32]] = None
+    """The computed cluster membership probabilities."""
+    selected_clusters_: np.ndarray[tuple[int], np.dtype[np.intp]] = None
+    """The computed leaf tree indices of the selected clusters."""
+    core_distances_: np.ndarray[tuple[int], np.dtype[np.float32]] = None
+    """The computed core distances. These are the distances to the
+    `min_samples`-th nearest neighbor."""
+    VALID_KDTREE_METRICS = [
         "euclidean",
         "l2",
         "manhattan",
@@ -126,7 +61,8 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         "minkowski",
         "p",
     ]
-    valid_balltree_metrics = valid_kdtree_metrics + [
+    """The distance metrics implemented for use with KDTrees."""
+    VALID_BALLTREE_METRICS = VALID_KDTREE_METRICS + [
         "seuclidean",
         "braycurtis",
         "canberra",
@@ -139,11 +75,12 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         "rogerstanimoto",
         "sokalsneath",
     ]
+    "The distance metrics implemented for use with BallTrees."
 
     _parameter_constraints = dict(
         min_samples=[Interval(Integral, 2, None, closed="left")],
         space_tree=[StrOptions({"auto", "kd_tree", "ball_tree"})],
-        metric=[StrOptions({*valid_balltree_metrics, "precomputed"})],
+        metric=[StrOptions({*VALID_BALLTREE_METRICS, "precomputed"})],
         min_cluster_size=[None, Interval(Real, 2.0, None, closed="left")],
         max_cluster_size=[Interval(Real, 2.0, None, closed="right")],
         use_bi_persistence=["boolean"],
@@ -156,12 +93,46 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         min_samples: int = 5,
         space_tree: str = "auto",
         metric: str = "euclidean",
-        metric_kws: dict | None = None,
+        metric_kws: dict[str, Any] | None = None,
         min_cluster_size: float | None = None,
         max_cluster_size: float = np.inf,
         use_bi_persistence: bool = False,
         num_threads: int | None = None,
     ):
+        """
+        Parameters
+        ----------
+        min_samples
+            The number of neighbors to use for computing core distances and the
+            mutual reachability distances. Higher values produce smoother density
+            profiles with fewer peaks. Minimum spanning tree inputs are assumed to
+            contain mutual reachability distances and ignore this parameter.
+        space_tree
+            The type of tree to use for the search. Options are "auto", "kd_tree"
+            and "ball_tree". If "auto", a "kd_tree" is used if that supports the
+            selected metric. Space trees are not used when `metric` is
+            "precomputed".
+        metric
+            The distance metric to use. See :py:attr:`.PLSCAN.VALID_KDTREE_METRICS`
+            and :py:attr:`.PLSCAN.VALID_BALLTREE_METRICS` for available options. Use
+            "precomputed" if the input to `.fit()` contains distances. See sklearn
+            documentation for metric definitions.
+        metric_kws
+            Additional keyword arguments for the distance metric. For example, `p`
+            for the Minkowski distance.
+        min_cluster_size
+            The minimum size limit for clusters, defaults to the value of
+            min_samples. Values below min_samples are not allowed, as the
+            leaf-clusters produced by those values can be incomplete and arbitrary.
+        max_cluster_size
+            The maximum size limit for clusters, by default np.inf.
+        use_bi_persistence
+            Whether to use total bi-persistence or total size-persistence for
+            selecting the optimal minimum cluster size.
+        num_threads
+            The number of threads to use for parallel computations, value must be
+            positive. If None, OpenMP's default maximum thread count is used.
+        """
         self.min_samples = min_samples
         self.space_tree = space_tree
         self.metric = metric
@@ -172,13 +143,13 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         self.num_threads = num_threads
 
     def fit(
-        self,
-        X,
-        y=None,
+        self: Self,
+        X: np.ndarray[tuple[int, ...]] | tuple | csr_array,
+        y: None = None,
         *,
         sample_weights: np.ndarray[tuple[int], np.dtype[np.float32]] | None = None,
         **fit_params,
-    ):
+    ) -> Self:
         """
         Computes PLSCAN clusters and hierarchies for the input data. Several
         inputs are supported, including feature vectors, precomputed sorted
@@ -192,7 +163,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         Parameters
         ----------
-        X : array_like | tuple | csr_array
+        X
             The input data. If `metric` is not set to "precomputed", the X must
             be a 2D array of shape (num_points, num_features). Missing values
             are not supported.
@@ -221,18 +192,17 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             through 4, each point should have `min_samples` neighbors. Infinite
             distances, either as input or as a result of too few neighbors, may
             break plots and the bi-persistence computation.
-        y : None, optional
+        y
             Ignored, present for compatibility with scikit-learn.
-        sample_weights : np.ndarray[tuple[int], np.dtype[np.float32]], optional
+        sample_weights
             Sample weights for the points in the sorted minimum spanning tree.
-            If None, all samples are considered equally weighted. Default is
-            None.
-        fit_params : dict, optional
+            If None, all samples are considered equally weighted.
+        **fit_params
             Unused additional parameters for compatibility with scikit-learn.
 
         Returns
         -------
-        self : PLSCAN
+        self
             The fitted PLSCAN instance.
         """
         # Validate parameters
@@ -358,12 +328,22 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         return self
 
     @property
-    def persistence_trace_(self):
+    def persistence_trace_(self: Self) -> plots.PersistenceTrace:
+        """
+        A trace of the total (bi-)persistence per minimum cluster size. sizes
+        represent births in (birth, death] intervals.
+        """
         check_is_fitted(self, "_persistence_trace")
         return plots.PersistenceTrace(self._persistence_trace)
 
     @property
-    def leaf_tree_(self):
+    def leaf_tree_(self: Self) -> plots.LeafTree:
+        """
+        The minimum cluster size leaf-cluster tree showing which condensed tree
+        segments are leaves at each minimum cluster size value. The object has
+        as plotting function and conversion methods for networkx, pandas, and
+        numpy.
+        """
         check_is_fitted(self, ("_leaf_tree"))
         return plots.LeafTree(
             self._leaf_tree,
@@ -374,7 +354,12 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         )
 
     @property
-    def condensed_tree_(self):
+    def condensed_tree_(self: Self) -> plots.CondensedTree:
+        """
+        The condensed cluster tree showing which distance-contour clusters exist
+        in the data. The object has as plotting function and conversion methods
+        for networkx, pandas, and numpy.
+        """
         check_is_fitted(self, ("_condensed_tree"))
         return plots.CondensedTree(
             self._leaf_tree,
@@ -384,7 +369,14 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         )
 
     @property
-    def single_linkage_tree_(self):
+    def single_linkage_tree_(
+        self: Self,
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
+        """
+        A single linkage dendrogram in scipy format. The first column represents
+        the link's parent, the second column represents the link's child, and
+        the third column represents the link's distance.
+        """
         check_is_fitted(self, ("_linkage_tree"))
         return np.column_stack(
             (
@@ -396,41 +388,49 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         )
 
     @property
-    def minimum_spanning_tree_(self):
+    def minimum_spanning_tree_(
+        self: Self,
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
+        """
+        A minimum spanning tree in scipy format. The first column represents the
+        edge's parent, the second column represents the edge's child, and the
+        third column represents the edge's distance. May be a spanning forest if
+        the input contained multiple connected components.
+        """
         check_is_fitted(self, "_minimum_spanning_tree")
         return np.column_stack(tuple(self._minimum_spanning_tree))
 
     def cluster_layers(
-        self,
+        self: Self,
         n_peaks: int | None = None,
         min_size: float | None = None,
         max_size: float | None = None,
         height: float = 0.0,
         threshold: float = 0.0,
         **kwargs,
-    ):
+    ) -> list[tuple[np.float32, api.Labelling]]:
         """
         Computes cluster labels and membership probabilities for the peaks in
         the persistence trace.
 
         Parameters
         ----------
-        n_peaks : int, optional
+        n_peaks
             The number of peaks to return. If None, all peaks are returned. If
             specified, the n_peaks most persistent peaks are returned. The
-            selection is performed after all other thresholds. Default is None.
-        min_size : float, optional
+            selection is performed after all other thresholds.
+        min_size
             The minimum cluster size to consider for the cluster layers. If
-            None, all clusters are considered. Default is None.
-        max_size : float, optional
+            None, all clusters are considered.
+        max_size
             The maximum cluster size to consider for the cluster layers. If
-            None, all clusters are considered. Default is None.
-        height : float, optional
+            None, all clusters are considered.
+        height
             Suppress peak with a persistence below this value, default 0.0.
-        threshold : float, optional
+        threshold
             Suppress peak with a persistence change below this value, default
             0.0.
-        **kwargs : dict, optional
+        **kwargs
             Additional parameters for the `scipy.signal.find_peaks` function.
             Note that the persistence signal is defined on irregularly spaced
             minimum cluster size values. So the parameters relating to the
@@ -439,7 +439,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         Returns
         -------
-        peaks : list[tuple]]
+        peaks
             Cluster labels and membership probabilities for the detected peaks.
             Each item contains the minimum cluster size, cluster labels, and
             membership probabilities for the corresponding peak.
@@ -459,23 +459,22 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             peaks = peaks[y[peaks] >= limit]
         return [(x[peak], *self.min_cluster_size_cut(x[peak])) for peak in peaks]
 
-    def distance_cut(self, epsilon: float):
+    def distance_cut(self: Self, epsilon: float) -> api.Labelling:
         """
         Computes (DBSCAN*-like) cluster labels and membership probabilities at
         the given distance threshold (epsilon).
 
         Parameters
         ----------
-        birth_size : float
+        birth_size
             The birth size threshold for the cluster labels and membership
             probabilities.
 
         Returns
         -------
-        labels : np.ndarray[tuple[int], np.dtype[np.int64]]
-            The cluster labels for each point in the input data.
-        probabilities : np.ndarray[tuple[int], np.dtype[np.float32]]
-            The membership probabilities for each point in the input data.
+        labelling
+            Effectively a tuple of cluster labels and membership probability
+            vectors.
         """
         check_is_fitted(self, "_leaf_tree")
         selected_clusters = api.apply_distance_cut(self._leaf_tree, epsilon)
@@ -483,23 +482,22 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
         )
 
-    def min_cluster_size_cut(self, cut_size: float):
+    def min_cluster_size_cut(self: Self, cut_size: float) -> api.Labelling:
         """
         Computes cluster labels and membership probabilities at the given cut
         size threshold (cut_size) in a left-open (birth, death] size interval.
 
         Parameters
         ----------
-        cut_size : float
+        cut_size
             The birth size threshold for the cluster labels and membership
             probabilities.
 
         Returns
         -------
-        labels : np.ndarray[tuple[int], np.dtype[np.int64]]
-            The cluster labels for each point in the input data.
-        probabilities : np.ndarray[tuple[int], np.dtype[np.float32]]
-            The membership probabilities for each point in the input data.
+        labelling
+            Effectively a tuple of cluster labels and membership probability
+            vectors.
         """
         check_is_fitted(self, "_leaf_tree")
         selected_clusters = api.apply_size_cut(self._leaf_tree, cut_size)
@@ -507,7 +505,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
         )
 
-    def _check_input(self, X):
+    def _check_input(self: Self, X):
         """Checks and converts the input to a CSR sparse matrix."""
         # Check kNN / MST inputs
         if isinstance(X, tuple):
@@ -545,7 +543,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             X = api.distance_matrix_to_csr(X, copy=copy)
         return X, X.shape[0], False, False
 
-    def _check_knn(self, X):
+    def _check_knn(self: Self, X):
         """Checks if a kNN graph is valid."""
         if len(X) != 2:
             raise ValueError(
@@ -575,7 +573,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         )
         return distances, indices
 
-    def _check_mst(self, X):
+    def _check_mst(self: Self, X):
         if len(X) != 2:
             raise ValueError(
                 "MST input must be a tuple of (edges, num_points), "

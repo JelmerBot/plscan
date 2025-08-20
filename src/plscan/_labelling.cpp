@@ -116,10 +116,27 @@ NB_MODULE(_labelling, m) {
                 nb::cast<array_ref<float const>>(asarray(probability), false)
             );
           },
-          nb::arg("label"), nb::arg("probability")
+          nb::arg("label"), nb::arg("probability"),
+          nb::sig("def __init__(self, label: np.ndarray, probability: np.ndarray) -> None"),
+          R"(
+            Parameters
+            ----------
+            label
+                The data point cluster labels.
+            persistence
+                The data point cluster membership probabilities.
+          )"
       )
-      .def_ro("label", &Labelling::label, nb::rv_policy::reference)
-      .def_ro("probability", &Labelling::probability, nb::rv_policy::reference)
+      .def_ro(
+          "label", &Labelling::label, nb::rv_policy::reference,
+          nb::sig("def label(self) -> np.ndarray"),
+          "A 1D array with cluster labels (np.int32)."
+      )
+      .def_ro(
+          "probability", &Labelling::probability, nb::rv_policy::reference,
+          nb::sig("def probability(self) -> np.ndarray"),
+          "A 1D array with cluster membership probabilities (np.float32)."
+      )
       .def(
           "__iter__",
           [](Labelling const &self) {
@@ -136,38 +153,30 @@ NB_MODULE(_labelling, m) {
             );
           }
       )
-      .doc() = R"(
-        Labelling contains the cluster labels and probabilities.
-
-        Parameters
-        ----------
-        label : numpy.ndarray[tuple[int], np.dtype[np.int32]]
-            The data point cluster labels.
-        persistence : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The data point cluster membership probabilities.
-      )";
+      .doc() = "Labelling contains the cluster labels and probabilities.";
 
   m.def(
       "compute_cluster_labels", &compute_cluster_labels, nb::arg("leaf_tree"),
       nb::arg("condensed_tree"), nb::arg("selected_clusters").noconvert(),
       nb::arg("num_points"),
+      nb::sig("def compute_cluster_labels(leaf_tree: plscan.leaf_tree.LeafTree, condensed_tree: plscan.condense_tree.CondensedTree, selected_clusters: np.ndarray, num_points: int) -> Labelling"),
       R"(
         Computes cluster labels and membership probabilities for the points.
 
         Parameters
         ----------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             The input leaf tree.
-        condensed_tree : plscan._condensed_tree.CondensedTree
+        condensed_tree
             The input condensed tree.
-        selected_clusters : numpy.ndarray[tuple[int], np.dtype[np.uint32_t]]
+        selected_clusters
             The condensed_tree parent IDs of the selected clusters.
-        num_points : int
+        num_points
             The number of points in the condensed tree.
 
         Returns
         -------
-        labelling : plscan._labelling.Labelling
+        labelling
             The Labelling containing arrays for the cluster labels and
             membership probabilities. Labels -1 indicate points classified as
             noise.

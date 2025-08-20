@@ -140,11 +140,34 @@ NB_MODULE(_sparse_graph, m) {
                 nb::cast<array_ref<int32_t const>>(asarray(indptr), false)
             );
           },
-          nb::arg("data"), nb::arg("indices"), nb::arg("indptr")
+          nb::arg("data"), nb::arg("indices"), nb::arg("indptr"),
+          nb::sig("def __init__(self, data: np.ndarray, indices: np.ndarray, indptr: np.ndarray) -> None"),
+          R"(
+          Parameters
+          ----------
+          data
+              An array of distances (np.float32).
+          indices
+              An array of column indices (np.int32).
+          indptr
+              The CSR indptr array (np.int32).
+          )"
       )
-      .def_ro("data", &SparseGraph::data, nb::rv_policy::reference)
-      .def_ro("indices", &SparseGraph::indices, nb::rv_policy::reference)
-      .def_ro("indptr", &SparseGraph::indptr, nb::rv_policy::reference)
+      .def_ro(
+          "data", &SparseGraph::data, nb::rv_policy::reference,
+          nb::sig("def data(self) -> np.ndarray"),
+          "A 1D array with data values (np.float32)"
+      )
+      .def_ro(
+          "indices", &SparseGraph::indices, nb::rv_policy::reference,
+          nb::sig("def indices(self) -> np.ndarray"),
+          "A 1D array with indices values (np.int32)"
+      )
+      .def_ro(
+          "indptr", &SparseGraph::indptr, nb::rv_policy::reference,
+          nb::sig("def indptr(self) -> np.ndarray"),
+          "A 1D array with indptr values (np.int32)"
+      )
       .def(
           "__iter__",
           [](SparseGraph const &self) {
@@ -161,37 +184,27 @@ NB_MODULE(_sparse_graph, m) {
             );
           }
       )
-      .doc() = R"(
-        SparseGraph contains a (square) distance matrix in CSR format.
-
-        Parameters
-        ----------
-        data : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            An array of distances.
-        indices : numpy.ndarray[tuple[int], np.dtype[np.int64]]
-            An array of column indices.
-        indptr : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
-            The CSR indptr array.
-      )";
+      .doc() = "SparseGraph contains a (square) distance matrix in CSR format.";
 
   m.def(
       "extract_core_distances", &extract_core_distances, nb::arg("graph"),
       nb::arg("min_samples") = 5, nb::arg("is_sorted") = false,
+      nb::sig("def extract_core_distances(graph: SparseGraph, min_samples: int = 5, is_sorted: bool = False) -> np.ndarray"),
       R"(
           Extracts core distances from a sparse graph.
 
           Parameters
           ----------
-          graph : plscan._sparse_graph.SparseGraph
+          graph
                 The sparse graph to extract core distances from.
-          min_samples : int
+          min_samples
                 The number of nearest neighbors to consider for core distance.
-          is_sorted : bool
+          is_sorted
                 Whether the rows of the graph are sorted by distance.
 
           Returns
           -------
-          core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
+          core_distances
                 An array of core distances.
         )"
   );
@@ -199,20 +212,21 @@ NB_MODULE(_sparse_graph, m) {
   m.def(
       "compute_mutual_reachability", &compute_mutual_reachability,
       nb::arg("graph"), nb::arg("core_distances"),
+      nb::sig("def compute_mutual_reachability(graph: SparseGraph, core_distances: np.ndarray) -> SparseGraph"),
       R"(
           Applies core distances to a sparse graph to compute mutual
           reachability.
 
           Parameters
           ----------
-          graph : plscan._sparse_graph.SparseGraph
+          graph
                 The sparse graph to extract core distances from.
-          core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
+          core_distances
                 An array of core distances, one for each point in the graph.
 
           Returns
           -------
-          mutual_graph : plscan._sparse_graph.SparseGraph
+          mutual_graph
                 A new sparse graph with mutual reachability distances. Rows are
                 sorted by mutual reachability distance.
         )"
