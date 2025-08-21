@@ -38,9 +38,14 @@ def main(path, stub, docs_out, mod_out, project_name):
 
     # Correct imports
     stubs = stubs.replace("import np", "import numpy as np")
-    child_modules = set(re.findall(fr"{project_name}\.(\w+)\.\w+", stubs))
-    stubs = re.sub(fr"{project_name}\.(\w+)\.(\w+)", r"\1.\2", stubs)
-    stubs = re.sub(fr"import {project_name}.*$", "from . import " + ', '.join(child_modules), stubs, flags=re.MULTILINE)
+    child_modules = set(re.findall(rf"{project_name}\.(\w+)\.\w+", stubs))
+    stubs = re.sub(rf"{project_name}\.(\w+)\.(\w+)", r"\1.\2", stubs)
+    stubs = re.sub(
+        rf"import {project_name}.*$",
+        "from . import " + ", ".join(child_modules),
+        stubs,
+        flags=re.MULTILINE,
+    )
 
     # Write the modified stubs to the output file
     docs_file = Path(path) / docs_out
@@ -55,21 +60,15 @@ def main(path, stub, docs_out, mod_out, project_name):
         f.write(
             dedent(
                 f"""\
-        from .{docs_package} import *
-        from . import {docs_package}
-        from . import {impl_package}
-        import builtins
-        __all__ = [name for name in dir({docs_package}) if not name.startswith("_")]
-
-        if not hasattr(builtins, "--BUILDING-DOCS--"):
-            # This is intentionally opaque to static analysis tools (e.g., mypy)
-            for name in dir({docs_package}):
-                if hasattr({impl_package}, name):
-                    globals()[name] = getattr({impl_package}, name)
-        """
+                import builtins
+                if not hasattr(builtins, "--BUILDING-DOCS--"):
+                    from .{impl_package} import *
+                else:
+                    from .{docs_package} import *
+                """
             )
         )
-    
+
 
 if __name__ == "__main__":
     main(*sys.argv[1:6])
