@@ -10,7 +10,7 @@ from matplotlib.patches import Ellipse
 from matplotlib.colors import Colormap, BoundaryNorm
 from typing import Self, Any
 
-from . import api
+from . import _api as api
 
 
 class CondensedTree(object):
@@ -167,7 +167,7 @@ class CondensedTree(object):
 
         Parameters
         ----------
-        
+
         leaf_separation
             A spacing parameter for icicle positioning.
         cmap
@@ -609,7 +609,7 @@ class LeafTree(object):
 
         Parameters
         ----------
-        
+
         leaf_separation
             A spacing parameter for icicle positioning.
         cmap
@@ -939,7 +939,7 @@ class PersistenceTrace(object):
 
         Parameters
         ----------
-        
+
         line_kws
             Additional keyword arguments for the line plot.
         """

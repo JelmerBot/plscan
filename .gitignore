@@ -1,6 +1,6 @@
 .idea/
 dist/
-docs/reference_*/
+docs/_autosummary*/
 build/
 _build/
 wheelhouse/

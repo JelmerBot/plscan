@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.abspath(".."))
 sys.path.insert(0, os.path.abspath("."))
 setattr(builtins, "--BUILDING-DOCS--", True)
 
-
 # -- Project information -----------------------------------------------------
 
 project = "plscan"
@@ -46,6 +45,7 @@ autoclass_content = 'both'
 autodoc_default_flags = ["members"]
 napoleon_use_rtype = False
 autosummary_generate = True
+autosummary_ignore_module_all = False
 intersphinx_mapping = {
     "python": ("https://docs.python.org/{.major}".format(sys.version_info), None),
     "numpy": ("https://numpy.org/doc/stable/", None),

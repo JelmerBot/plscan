@@ -111,8 +111,7 @@ size_t fill_size_persistence(
   nb::gil_scoped_release guard{};
   size_t const trace_size = initialize_trace(result, leaf_tree);
   fill_persistences(
-      result, leaf_tree, trace_size,
-      [leaf_tree](size_t const idx) {
+      result, leaf_tree, trace_size, [leaf_tree](size_t const idx) {
         // skip roots (i.e. direct children of the phantom root)
         return static_cast<float>(leaf_tree.parent[idx] > 0u) *
                (leaf_tree.max_size[idx] - leaf_tree.min_size[idx]);
@@ -248,7 +247,7 @@ auto compute_stability_icicles(
 
 // --- Module definitions
 
-NB_MODULE(_persistence_trace, m) {
+NB_MODULE(_persistence_trace_ext, m) {
   m.doc() = "Module for persistence trace computation in PLSCAN.";
   nb::class_<PersistenceTrace>(m, "PersistenceTrace")
       .def(
@@ -263,6 +262,11 @@ NB_MODULE(_persistence_trace, m) {
             );
           },
           nb::arg("min_size"), nb::arg("persistence"),
+          nb::sig(
+              "def __init__(self, min_size: np.ndarray[tuple[int], "
+              "np.dtype[np.float32]], persistence: np.ndarray[tuple[int], "
+              "np.dtype[np.float32]]) -> None"
+          ),
           R"(
             Parameters
             ----------

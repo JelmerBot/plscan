@@ -101,7 +101,7 @@ Labelling compute_cluster_labels(
   return {label_view, std::move(label_cap)};
 }
 
-NB_MODULE(_labelling, m) {
+NB_MODULE(_labelling_ext, m) {
   m.doc() = "Module for cluster labelling in PLSCAN.";
 
   nb::class_<Labelling>(m, "Labelling")

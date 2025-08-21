@@ -89,7 +89,7 @@ LinkageTree compute_linkage_tree(
   return {tree_view, std::move(tree_cap), num_edges};
 }
 
-NB_MODULE(_linkage_tree, m) {
+NB_MODULE(_linkage_tree_ext, m) {
   m.doc() = "Module for single-linkage computation in PLSCAN.";
 
   nb::class_<LinkageTree>(m, "LinkageTree")

@@ -75,5 +75,8 @@
     "-DSKBUILD=True",
     "-DSKBUILD_PROJECT_NAME=plscan",
     "-DPython3_EXECUTABLE=C:\\Users\\jelme\\miniforge3\\python.exe"
+  ],
+  "cSpell.words": [
+    "autosummary"
   ]
 }

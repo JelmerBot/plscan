@@ -1,3 +1,5 @@
+"""The public scikit-learn interface."""
+
 import numpy as np
 from scipy.sparse import issparse, csr_array
 from scipy.signal import find_peaks
@@ -11,7 +13,7 @@ from sklearn.neighbors import KDTree, BallTree
 from numbers import Real, Integral
 from typing import Self, Any
 
-from . import api
+from . import _api as api
 from . import plots
 
 

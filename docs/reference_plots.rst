@@ -1,14 +1,8 @@
 The plotting API
 ================
 
-.. automodule:: plscan.plots
+.. autosummary::
+   :toctree: _autosummary_plots
+   :recursive:
 
-   .. rubric:: Classes
-
-   .. autosummary::
-      :toctree: reference_plots
-      :recursive:
-
-      CondensedTree
-      LeafTree
-      PersistenceTrace
+   plscan.plots

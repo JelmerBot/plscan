@@ -10,13 +10,19 @@
    using_sample_weights
 
 .. toctree::
+   :caption: API reference
+   :maxdepth: 1
+   :hidden:
+   
+   _autosummary_public/plscan
+   _autosummary_plots/plscan.plots
+
+.. toctree::
    :caption: Development
    :maxdepth: 1
    :hidden:
    
    local_development
-   reference_plscan
-   reference_plots
    reference_api
 
 |PyPI version|

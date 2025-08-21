@@ -269,7 +269,7 @@ std::vector<NodeData> check_node_data(array_ref<double const> const node_data) {
 
 // --- Module definitions
 
-NB_MODULE(_space_tree, m) {
+NB_MODULE(_space_tree_ext, m) {
   m.doc() = "Module for space tree computations in PLSCAN.";
 
   nb::class_<NodeData>(m, "NodeData")
@@ -357,7 +357,7 @@ NB_MODULE(_space_tree, m) {
       )
       .def_ro(
           "idx_array", &SpaceTree::idx_array, nb::rv_policy::reference,
-          "A 1D array mapping nodes to data points (np.int64)."
+          "A 1D array mapping nodes to data points."
       )
       .def_ro(
           "node_data", &SpaceTree::node_data, nb::rv_policy::reference,

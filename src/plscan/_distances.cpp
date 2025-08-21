@@ -2,7 +2,7 @@
 
 #include "_array.h"
 
-NB_MODULE(_distances, m) {
+NB_MODULE(_distances_ext, m) {
   m.doc() = "Module for distance computation in PLSCAN.";
 
   m.def(
@@ -12,6 +12,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Euclidean>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def euclidean(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Euclidean distance between two 1D vectors.
 
@@ -36,6 +40,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Cityblock>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def cityblock(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Cityblock distance between two 1D vectors.
 
@@ -60,6 +68,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Chebyshev>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def chebyshev(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Chebyshev distance between two 1D vectors.
 
@@ -84,6 +96,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Minkowski>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def minkowski(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]], *, p: float) -> float"
+      ),
       R"(
         Minkowski distance between two 1D vectors.
 
@@ -110,6 +126,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Hamming>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def hamming(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Hamming distance between two 1D vectors.
 
@@ -134,6 +154,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Braycurtis>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def braycurtis(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Braycurtis distance between two 1D vectors.
 
@@ -158,6 +182,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Canberra>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def canberra(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Canberra distance between two 1D vectors.
 
@@ -181,6 +209,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Haversine>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def haversine(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Haversine distance between two 1D vectors.
 
@@ -209,6 +241,11 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::SEuclidean>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def seuclidean(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]], *, V: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         SEuclidean distance between two 1D vectors.
 
@@ -238,6 +275,11 @@ NB_MODULE(_distances, m) {
         );
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def mahalanobis(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]], *, VI: "
+          "np.ndarray[tuple[int, int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Mahalanobis distance between two 1D vectors.
 
@@ -264,6 +306,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Dice>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def dice(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Dice distance between two 1D vectors.
 
@@ -288,6 +334,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Jaccard>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def jaccard(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Jaccard distance between two 1D vectors.
 
@@ -312,6 +362,10 @@ NB_MODULE(_distances, m) {
         return get_dist<Metric::Russellrao>(metric_kws)(to_view(u), to_view(v));
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def russellrao(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Russellrao distance between two 1D vectors.
 
@@ -338,6 +392,11 @@ NB_MODULE(_distances, m) {
         );
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def rogerstanimoto(u: np.ndarray[tuple[int], np.dtype[np.float32]], "
+          "v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Rogerstanimoto distance between two 1D vectors.
 
@@ -364,6 +423,10 @@ NB_MODULE(_distances, m) {
         );
       },
       nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::sig(
+          "def sokalsneath(u: np.ndarray[tuple[int], np.dtype[np.float32]], v: "
+          "np.ndarray[tuple[int], np.dtype[np.float32]]) -> float"
+      ),
       R"(
         Sokalsneath distance between two 1D vectors.
 

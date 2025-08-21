@@ -225,7 +225,7 @@ CondensedTree compute_condensed_tree(
   return {tree_view, std::move(tree_cap), filled_edges, cluster_count};
 }
 
-NB_MODULE(_condensed_tree, m) {
+NB_MODULE(_condensed_tree_ext, m) {
   m.doc() = "Module for condensed tree computation in PLSCAN.";
 
   nb::class_<CondensedTree>(m, "CondensedTree")
@@ -249,6 +249,14 @@ NB_MODULE(_condensed_tree, m) {
           },
           nb::arg("parent"), nb::arg("child"), nb::arg("distance"),
           nb::arg("child_size"), nb::arg("cluster_rows"),
+          nb::sig(
+              "def __init__(self, parent: np.ndarray[tuple[int], "
+              "np.dtype[np.uint32]], child: np.ndarray[tuple[int], "
+              "np.dtype[np.uint32]], distance: np.ndarray[tuple[int], "
+              "np.dtype[np.float32]], child_size: np.ndarray[tuple[int], "
+              "np.dtype[np.float32]], cluster_rows: np.ndarray[tuple[int], "
+              "np.dtype[np.uint32]]) -> None"
+          ),
           R"(
             Parameters
             ----------

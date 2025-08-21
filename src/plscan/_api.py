@@ -6,29 +6,30 @@ from sklearn.neighbors._kd_tree import KDTree32
 from sklearn.neighbors._ball_tree import BallTree32
 from typing import Any
 
-from .threads import get_max_threads, set_num_threads
-from .sparse_graph import (
+from ._distances import *
+from ._threads import get_max_threads, set_num_threads
+from ._sparse_graph import (
     SparseGraph,
     extract_core_distances,
     compute_mutual_reachability,
 )
-from .space_tree import NodeData, SpaceTree, kdtree_query, balltree_query
-from .spanning_tree import (
+from ._space_tree import NodeData, SpaceTree, kdtree_query, balltree_query
+from ._spanning_tree import (
     SpanningTree,
     extract_spanning_forest,
     compute_spanning_tree_kdtree,
     compute_spanning_tree_balltree,
 )
-from .linkage_tree import LinkageTree, compute_linkage_tree
-from .condensed_tree import CondensedTree, compute_condensed_tree
-from .leaf_tree import LeafTree, compute_leaf_tree, apply_size_cut, apply_distance_cut
-from .persistence_trace import (
+from ._linkage_tree import LinkageTree, compute_linkage_tree
+from ._condensed_tree import CondensedTree, compute_condensed_tree
+from ._leaf_tree import LeafTree, compute_leaf_tree, apply_size_cut, apply_distance_cut
+from ._persistence_trace import (
     PersistenceTrace,
     compute_size_persistence,
     compute_bi_persistence,
     compute_stability_icicles,
 )
-from .labelling import Labelling, compute_cluster_labels
+from ._labelling import Labelling, compute_cluster_labels
 
 
 def compute_mutual_spanning_tree(
@@ -140,7 +141,7 @@ def extract_mutual_spanning_forest(
         reachability.
     core_distances
         A 1D array with core distances.
-    """ 
+    """
     graph = SparseGraph(graph.data, graph.indices, graph.indptr)
     core_distances = extract_core_distances(
         graph, min_samples=min_samples, is_sorted=is_sorted
@@ -328,7 +329,7 @@ def distance_matrix_to_csr(
 
     Returns
     -------
-    graph: 
+    graph:
         A sparse distance matrix in CSR format.
     """
     num_points, num_neighbors = distances.shape

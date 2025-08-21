@@ -11,7 +11,7 @@ from plscan import (
     clusters_from_spanning_forest,
     compute_mutual_spanning_tree,
 )
-from plscan.space_tree import SpaceTree, kdtree_query, balltree_query, check_node_data
+from plscan._space_tree import SpaceTree, kdtree_query, balltree_query, check_node_data
 
 from .conftest import numerical_balltree_metrics, duplicate_metrics, boolean_metrics
 from .checks import *
