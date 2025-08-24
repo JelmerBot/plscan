@@ -13,6 +13,9 @@ jobs:
   file_filter:
     name: Check file changes
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       lint: ${{ steps.changes_filter.outputs.lint }}
       build: ${{ steps.changes_filter.outputs.build }}
@@ -58,6 +61,8 @@ jobs:
 
   build_wheels:
     name: Build wheels
+    permissions:
+      contents: read
     needs: [file_filter, run_linters]
     if: always() && needs.file_filter.outputs.build == 'true' && needs.file_filter.result != 'failure' && needs.run_linters.result != 'cancelled'
     uses: ./.github/workflows/_build_wheels.yml
