@@ -28,6 +28,8 @@ jobs:
     name: Build ${{ matrix.platform }}_${{ matrix.arch }}
     needs: file_filter
     if: needs.file_filter.outputs.build == 'true'
+    permissions:
+      contents: read
     runs-on: ${{ 
       (matrix.platform == 'macosx' && matrix.arch == 'x64' && 'macosx-13') ||
       (matrix.platform == 'macosx' && matrix.arch == 'arm64' && 'macosx-latest') ||

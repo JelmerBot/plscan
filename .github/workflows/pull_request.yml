@@ -32,6 +32,7 @@ jobs:
     needs: run_linters
     permissions:
       contents: read
+      pull-requests: read
     uses: ./.github/workflows/_build_wheels.yml
     secrets: inherit
 
