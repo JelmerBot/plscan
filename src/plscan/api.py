@@ -3,31 +3,29 @@ from typing import Any, Callable
 from scipy.sparse import csr_array
 from sklearn.neighbors._ball_tree import BallTree32
 from sklearn.neighbors._kd_tree import KDTree32
-from ._lib import (
-    CondensedTree,
-    Labelling,
-    LeafTree,
-    LinkageTree,
+
+from ._distances import get_dist as get_dist
+from ._leaf_tree import LeafTree, compute_leaf_tree
+from ._labelling import Labelling, compute_cluster_labels
+from ._linkage_tree import LinkageTree, compute_linkage_tree
+from ._helpers import sort_spanning_tree, most_persistent_clusters
+from ._condensed_tree import CondensedTree, compute_condensed_tree
+from ._space_tree import SpaceTree, kdtree_query, balltree_query
+from ._persistence_trace import (
     PersistenceTrace,
-    SpaceTree,
-    SpanningTree,
-    SparseGraph,
-    balltree_query,
-    compute_bi_persistence,
-    compute_cluster_labels,
-    compute_condensed_tree,
-    compute_leaf_tree,
-    compute_linkage_tree,
-    compute_mutual_reachability,
     compute_size_persistence,
-    compute_spanning_tree_balltree,
-    compute_spanning_tree_kdtree,
-    extract_core_distances,
+    compute_bi_persistence,
+)
+from ._spanning_tree import (
+    SpanningTree,
     extract_spanning_forest,
-    kdtree_query,
-    most_persistent_clusters,
-    sort_spanning_tree,
-    get_dist as _get_dist,
+    compute_spanning_tree_kdtree,
+    compute_spanning_tree_balltree,
+)
+from ._sparse_graph import (
+    SparseGraph,
+    extract_core_distances,
+    compute_mutual_reachability,
 )
 
 
@@ -239,7 +237,7 @@ def clusters_from_spanning_forest(
     return labels, selected_clusters, trace, leaf_tree, condensed_tree, linkage_tree
 
 
-def get_dist(
+def get_distance_callback(
     metric: str,
     *,
     p: float | None = None,
@@ -279,4 +277,4 @@ def get_dist(
         The distance function callback. Inputs must be 1D c-contiguous numpy
         arrays of float32.
     """
-    return _get_dist(metric, p=p, V=V, VI=VI)
+    return get_dist(metric, p=p, V=V, VI=VI)

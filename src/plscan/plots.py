@@ -10,7 +10,12 @@ from matplotlib.patches import Ellipse
 from matplotlib.colors import Colormap, BoundaryNorm
 from typing import Any
 
-from . import _lib as lib
+from ._leaf_tree import LeafTree as LeafTreeTuple
+from ._condensed_tree import CondensedTree as CondensedTreeTuple
+from ._persistence_trace import (
+    PersistenceTrace as PersistenceTraceTuple,
+    compute_stability_icicles,
+)
 
 
 class CondensedTree(object):
@@ -23,8 +28,8 @@ class CondensedTree(object):
 
     def __init__(
         self,
-        leaf_tree: lib.LeafTree,
-        condensed_tree: lib.CondensedTree,
+        leaf_tree: LeafTreeTuple,
+        condensed_tree: CondensedTreeTuple,
         selected_clusters: np.ndarray[tuple[int], np.dtype[np.uint32]],
         num_points: int,
     ):
@@ -203,7 +208,7 @@ class CondensedTree(object):
 
         # Prepare trees
         max_size = self._leaf_tree.min_size[0]
-        cluster_tree = lib.CondensedTree(
+        cluster_tree = CondensedTreeTuple(
             self._tree.parent[self._tree.cluster_rows],
             self._tree.child[self._tree.cluster_rows],
             distances[self._tree.cluster_rows].astype(
@@ -439,10 +444,10 @@ class LeafTree(object):
 
     def __init__(
         self,
-        leaf_tree: lib.LeafTree,
-        condensed_tree: lib.CondensedTree,
+        leaf_tree: LeafTreeTuple,
+        condensed_tree: CondensedTreeTuple,
         selected_clusters: np.ndarray[tuple[int], np.dtype[np.uint32]],
-        persistence_trace: lib.PersistenceTrace,
+        persistence_trace: PersistenceTraceTuple,
         num_points: int,
     ):
         """
@@ -822,7 +827,7 @@ class LeafTree(object):
 
     def _compute_icicle_traces(self):
         # Lists the size--distance-persistence trace for each cluster
-        sizes, traces = lib.compute_stability_icicles(
+        sizes, traces = compute_stability_icicles(
             self._tree, self._condensed_tree, self._num_points
         )
 
@@ -882,7 +887,7 @@ class PersistenceTrace(object):
     A trace of the persistence of clusters in a condensed tree.
     """
 
-    def __init__(self, trace: lib.PersistenceTrace):
+    def __init__(self, trace: PersistenceTraceTuple):
         """
         Parameters
         ----------

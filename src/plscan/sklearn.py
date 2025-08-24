@@ -13,22 +13,15 @@ from sklearn.neighbors import KDTree, BallTree
 from numbers import Real, Integral
 from typing import Any
 
+from ._spanning_tree import SpanningTree
+from ._leaf_tree import apply_distance_cut, apply_size_cut
+from ._labelling import Labelling, compute_cluster_labels
+from ._threads import get_max_threads, set_num_threads
+from ._helpers import distance_matrix_to_csr, knn_to_csr, remove_self_loops
 from .api import (
     compute_mutual_spanning_tree,
     extract_mutual_spanning_forest,
     clusters_from_spanning_forest,
-)
-from ._lib import (
-    Labelling,
-    SpanningTree,
-    apply_distance_cut,
-    apply_size_cut,
-    compute_cluster_labels,
-    distance_matrix_to_csr,
-    knn_to_csr,
-    remove_self_loops,
-    get_max_threads,
-    set_num_threads,
 )
 from . import plots
 
