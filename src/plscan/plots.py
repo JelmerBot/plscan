@@ -959,5 +959,5 @@ class PersistenceTrace(object):
             **line_kws,
         )
         plt.ylim([0, plt.ylim()[1]])
-        plt.xlabel("Cluster birth size in (birth, death]")
+        plt.xlabel("Min cluster size in (birth, death]")
         plt.ylabel("Total persistence")
