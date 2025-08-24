@@ -26,10 +26,10 @@ jobs:
         with:
           filters: |
             lint: 
-              - '*.h'
-              - '*.cpp'
-              - '*.py'
-              - '*.ipynb'
+              - '**/*.h'
+              - '**/*.cpp'
+              - '**/*.py'
+              - '**/*.ipynb'
             build:
               - 'src/**'
               - 'tests/**'
