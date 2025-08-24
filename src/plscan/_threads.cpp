@@ -3,7 +3,7 @@
 
 namespace nb = nanobind;
 
-NB_MODULE(_threads_ext, m) {
+NB_MODULE(_threads, m) {
   m.doc() = "Module for adjusting how many threads PLSCAN uses.";
 
   m.def(

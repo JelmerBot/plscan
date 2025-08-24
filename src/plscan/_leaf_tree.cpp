@@ -128,7 +128,7 @@ array_ref<uint32_t const> apply_distance_cut(
   return to_array(out_view, std::move(out_cap), num_selected);
 }
 
-NB_MODULE(_leaf_tree_ext, m) {
+NB_MODULE(_leaf_tree, m) {
   m.doc() = "Module for leaf tree computation in PLSCAN.";
 
   nb::class_<LeafTree>(m, "LeafTree")
@@ -151,15 +151,6 @@ NB_MODULE(_leaf_tree_ext, m) {
           },
           nb::arg("parent"), nb::arg("min_distance"), nb::arg("max_distance"),
           nb::arg("min_size"), nb::arg("max_size"),
-          nb::sig(                                                            //
-              "def __init__(self, "                                           //
-              " parent: np.ndarray[tuple[int], np.dtype[np.uint32]],"         //
-              " min_distance: np.ndarray[tuple[int], np.dtype[np.float32]],"  //
-              " max_distance: np.ndarray[tuple[int], np.dtype[np.float32]],"  //
-              " min_size: np.ndarray[tuple[int], np.dtype[np.float32]],"      //
-              " max_size: np.ndarray[tuple[int], np.dtype[np.float32]]"       //
-              ") -> None"
-          ),
           R"(
             Parameters
             ----------

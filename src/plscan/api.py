@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Any
+from typing import Any, Callable
 from scipy.sparse import csr_array
 from sklearn.neighbors._ball_tree import BallTree32
 from sklearn.neighbors._kd_tree import KDTree32
@@ -27,6 +27,7 @@ from ._lib import (
     kdtree_query,
     most_persistent_clusters,
     sort_spanning_tree,
+    get_dist as _get_dist,
 )
 
 
@@ -236,3 +237,46 @@ def clusters_from_spanning_forest(
         leaf_tree, condensed_tree, selected_clusters, num_points
     )
     return labels, selected_clusters, trace, leaf_tree, condensed_tree, linkage_tree
+
+
+def get_dist(
+    metric: str,
+    *,
+    p: float | None = None,
+    V: np.ndarray[tuple[int], np.dtype[np.float32]] | None = None,
+    VI: np.ndarray[tuple[int, int], np.dtype[np.float32]] | None = None,
+) -> Callable[
+    [
+        np.ndarray[tuple[int], np.dtype[np.float32]],
+        np.ndarray[tuple[int], np.dtype[np.float32]],
+    ],
+    float,
+]:
+    """
+    Returns a fast distance function callback for the specified metric.
+    Potential keyword arguments are processed once here, and do not have to be
+    repeated on the callback.
+
+    Parameters
+    ----------
+    metric
+        The distance metric to use. See
+        :py:attr:`~plscan.PLSCAN.VALID_BALLTREE_METRICS` for a list of valid
+        metrics. See sklearn documentation for metric definitions.
+    p
+        The order of the Minkowski distance. Required if `metric` is
+        "minkowski".
+    V
+        The variance vector for the standardized Euclidean distance. Required if
+        `metric` is "seuclidean".
+    VI
+        The inverse covariance matrix for the Mahalanobis distance. Required if
+        `metric` is "mahalanobis".
+
+    Returns
+    -------
+    dist
+        The distance function callback. Inputs must be 1D c-contiguous numpy
+        arrays of float32.
+    """
+    return _get_dist(metric, p=p, V=V, VI=VI)

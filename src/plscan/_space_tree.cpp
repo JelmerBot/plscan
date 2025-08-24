@@ -269,7 +269,7 @@ std::vector<NodeData> check_node_data(array_ref<double const> const node_data) {
 
 // --- Module definitions
 
-NB_MODULE(_space_tree_ext, m) {
+NB_MODULE(_space_tree, m) {
   m.doc() = "Module for space tree computations in PLSCAN.";
 
   nb::class_<NodeData>(m, "NodeData")

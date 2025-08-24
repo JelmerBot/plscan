@@ -39,6 +39,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx_copybutton",
+    "sphinx_autodoc_typehints",
     "nbsphinx",
 ]
 
@@ -47,6 +48,8 @@ autodoc_default_flags = ["members"]
 napoleon_use_rtype = False
 autosummary_generate = True
 autosummary_ignore_module_all = False
+typehints_defaults = "comma"
+always_use_bars_union = True
 nbsphinx_assume_equations = False
 nbsphinx_execute = "never"
 intersphinx_mapping = {

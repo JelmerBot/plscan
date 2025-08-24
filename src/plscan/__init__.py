@@ -5,6 +5,7 @@ from .api import (
     clusters_from_spanning_forest,
     extract_mutual_spanning_forest,
     compute_mutual_spanning_tree,
+    get_dist,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "clusters_from_spanning_forest",
     "extract_mutual_spanning_forest",
     "compute_mutual_spanning_tree",
+    "get_dist",
 ]

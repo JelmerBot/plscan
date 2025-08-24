@@ -123,7 +123,7 @@ SparseGraph compute_mutual_reachability(
 
 // --- Module definitions
 
-NB_MODULE(_sparse_graph_ext, m) {
+NB_MODULE(_sparse_graph, m) {
   m.doc() = "Module for representing sparse CSR graph.";
 
   nb::class_<SparseGraph>(m, "SparseGraph")
@@ -141,13 +141,6 @@ NB_MODULE(_sparse_graph_ext, m) {
             );
           },
           nb::arg("data"), nb::arg("indices"), nb::arg("indptr"),
-          nb::sig(                                                     //
-              "def __init__(self,"                                     //
-              " data: np.ndarray[tuple[int], np.dtype[np.float32]],"   //
-              " indices: np.ndarray[tuple[int], np.dtype[np.int32]],"  //
-              " indptr: np.ndarray[tuple[int], np.dtype[np.int32]]"    //
-              ") -> None"
-          ),
           R"(
           Parameters
           ----------

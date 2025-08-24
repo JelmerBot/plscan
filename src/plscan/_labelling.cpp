@@ -101,7 +101,7 @@ Labelling compute_cluster_labels(
   return {label_view, std::move(label_cap)};
 }
 
-NB_MODULE(_labelling_ext, m) {
+NB_MODULE(_labelling, m) {
   m.doc() = "Module for cluster labelling in PLSCAN.";
 
   nb::class_<Labelling>(m, "Labelling")
@@ -117,9 +117,6 @@ NB_MODULE(_labelling_ext, m) {
             );
           },
           nb::arg("label"), nb::arg("probability"),
-          nb::sig("def __init__(self, label: np.ndarray[tuple[int], "
-                  "np.dtype[np.float32]], probability: np.ndarray[tuple[int], "
-                  "np.dtype[np.float32]]) -> None"),
           R"(
             Parameters
             ----------

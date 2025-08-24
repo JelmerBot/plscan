@@ -10,7 +10,7 @@ nb::object wrap_dist(nb::dict const metric_kws) {
                           ) { return dist(to_view(x), to_view(y)); });
 }
 
-NB_MODULE(_distances_ext, m) {
+NB_MODULE(_distances, m) {
   m.doc() = "Module for distance computation in PLSCAN.";
   m.def(
       "get_dist",
@@ -41,17 +41,6 @@ NB_MODULE(_distances_ext, m) {
         );
       },
       nb::arg("metric"), nb::arg("metric_kws"),
-      nb::sig(                //
-          "def get_dist("     //
-          " metric: str, *,"  //
-          " p: float,"        //
-          " V: np.ndarray[tuple[int], np.dtype[np.float3//2]],"
-          " VI: np.ndarray[tuple[int, int], np.dtype[np.//float32]]"
-          ") -> typing.Callable[["  //
-          " np.ndarray[tuple[int], np.dtype[np.float32]]//,"
-          " np.ndarray[tuple[int], np.dtype[np.float32]]//"
-          "], float]"  //
-      ),
       R"(
         Retrieves the specified distance metric callback.
 
@@ -60,14 +49,12 @@ NB_MODULE(_distances_ext, m) {
         metric
           The name of the metric to use. See :py:attr:`~plscan.PLSCAN.VALID_BALLTREE_METRICS` 
           for a list of valid metrics.
-        p
-          The order of the Minkowski distance. Required if `metric` is "minkowski".
-        V
-          The variance vector for the standardized Euclidean distance. Required
-          if `metric` is "seuclidean".
-        VI
-          The inverse covariance matrix for the Mahalanobis distance. Required
-          if `metric` is "mahalanobis".
+        **metric_kws
+          p: The order of the Minkowski distance. Required if `metric` is "minkowski".
+          V: The variance vector for the standardized Euclidean distance. Required if 
+          `metric` is "seuclidean".
+          VI: The inverse covariance matrix for the Mahalanobis distance. Required if 
+          `metric` is "mahalanobis".
 
         Returns
         -------

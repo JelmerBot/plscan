@@ -530,7 +530,7 @@ SpanningTree compute_spanning_tree_balltree(
 
 // --- Module definitions
 
-NB_MODULE(_spanning_tree_ext, m) {
+NB_MODULE(_spanning_tree, m) {
   m.doc() = "Module for spanning tree computation in PLSCAN.";
 
   nb::class_<SpanningTree>(m, "SpanningTree")
@@ -548,13 +548,6 @@ NB_MODULE(_spanning_tree_ext, m) {
             );
           },
           nb::arg("parent"), nb::arg("child"), nb::arg("distance"),
-          nb::sig(
-              "def __init__(self,"                                       //
-              " parent: np.ndarray[tuple[int], np.dtype[np.uint32]],"    //
-              " child: np.ndarray[tuple[int], np.dtype[np.uint32]],"     //
-              " distance: np.ndarray[tuple[int], np.dtype[np.float32]]"  //
-              ") -> None"
-          ),
           R"(
             Parameters
             ----------

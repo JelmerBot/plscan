@@ -32,9 +32,9 @@ class CondensedTree(object):
         Parameters
         ----------
         leaf_tree
-            The leaf tree namedtuple as produced internally.
+            The leaf tree object as produced internally.
         condensed_tree
-            The condensed tree namedtuple as produced internally.
+            The condensed tree object as produced internally.
         selected_clusters
             The condensed tree parent IDs for the selected clusters.
         num_points
@@ -449,9 +449,9 @@ class LeafTree(object):
         Parameters
         ----------
         leaf_tree
-            The leaf tree namedtuple as produced internally.
+            The leaf tree object as produced internally.
         condensed_tree
-            The condensed tree namedtuple as produced internally.
+            The condensed tree object as produced internally.
         selected_clusters
             The leaf tree parent IDs for the selected clusters.
         persistence_trace
