@@ -3,8 +3,31 @@ on:
   workflow_call:
 
 jobs:
+  file_filter:
+    name: Check file changes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.changes_filter.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes_filter
+        with:
+          filters: |
+            build:
+              - 'src/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'CMakeLists.txt'
+              - '.github/workflows/_build_wheels.yml'
+
   build_wheels:
     name: Build ${{ matrix.platform }}_${{ matrix.arch }}
+    needs: file_filter
+    if: needs.file_filter.outputs.build == 'true'
     runs-on: ${{ 
       (matrix.platform == 'macosx' && matrix.arch == 'x64' && 'macosx-13') ||
       (matrix.platform == 'macosx' && matrix.arch == 'arm64' && 'macosx-latest') ||
