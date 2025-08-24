@@ -13,7 +13,23 @@ from sklearn.neighbors import KDTree, BallTree
 from numbers import Real, Integral
 from typing import Self, Any
 
-from . import _api as api
+from .api import (
+    compute_mutual_spanning_tree,
+    extract_mutual_spanning_forest,
+    clusters_from_spanning_forest,
+)
+from ._api import (
+    Labelling,
+    SpanningTree,
+    apply_distance_cut,
+    apply_size_cut,
+    compute_cluster_labels,
+    distance_matrix_to_csr,
+    knn_to_csr,
+    remove_self_loops,
+    get_max_threads,
+    set_num_threads
+)
 from . import plots
 
 
@@ -253,7 +269,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                     )
 
         if self.num_threads is not None:
-            api.set_num_threads(self.num_threads)
+            set_num_threads(self.num_threads)
 
         # Validate inputs
         if self.metric != "precomputed":
@@ -280,7 +296,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         if self.metric != "precomputed":
             self._mutual_graph = None
             self._minimum_spanning_tree, self._neighbors, self.core_distances_ = (
-                api.compute_mutual_spanning_tree(
+                compute_mutual_spanning_tree(
                     X,
                     space_tree=space_tree,
                     min_samples=self.min_samples,
@@ -292,7 +308,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self.core_distances_ = None
             self._mutual_graph = None
             self._neighbors = None
-            self._minimum_spanning_tree = api.SpanningTree(
+            self._minimum_spanning_tree = SpanningTree(
                 X[:, 0].astype(np.uint32, copy=False),
                 X[:, 1].astype(np.uint32, copy=False),
                 X[:, 2].astype(np.float32, copy=False),
@@ -303,7 +319,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
                 self._minimum_spanning_tree,
                 self._mutual_graph,
                 self.core_distances_,
-            ) = api.extract_mutual_spanning_forest(
+            ) = extract_mutual_spanning_forest(
                 X, min_samples=self.min_samples, is_sorted=is_sorted
             )
 
@@ -315,7 +331,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             self._leaf_tree,
             self._condensed_tree,
             self._linkage_tree,
-        ) = api.clusters_from_spanning_forest(
+        ) = clusters_from_spanning_forest(
             self._minimum_spanning_tree,
             self._num_points,
             sample_weights=sample_weights,
@@ -326,7 +342,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         # Reset the number of threads back to the default
         if self.num_threads is not None:
-            api.set_num_threads(api.get_max_threads())
+            set_num_threads(get_max_threads())
         return self
 
     @property
@@ -410,7 +426,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         height: float = 0.0,
         threshold: float = 0.0,
         **kwargs,
-    ) -> list[tuple[np.float32, api.Labelling]]:
+    ) -> list[tuple[np.float32, Labelling]]:
         """
         Computes cluster labels and membership probabilities for the peaks in
         the persistence trace.
@@ -461,7 +477,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             peaks = peaks[y[peaks] >= limit]
         return [(x[peak], *self.min_cluster_size_cut(x[peak])) for peak in peaks]
 
-    def distance_cut(self: Self, epsilon: float) -> api.Labelling:
+    def distance_cut(self: Self, epsilon: float) -> Labelling:
         """
         Computes (DBSCAN*-like) cluster labels and membership probabilities at
         the given distance threshold (epsilon).
@@ -479,12 +495,12 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             vectors.
         """
         check_is_fitted(self, "_leaf_tree")
-        selected_clusters = api.apply_distance_cut(self._leaf_tree, epsilon)
-        return api.compute_cluster_labels(
+        selected_clusters = apply_distance_cut(self._leaf_tree, epsilon)
+        return compute_cluster_labels(
             self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
         )
 
-    def min_cluster_size_cut(self: Self, cut_size: float) -> api.Labelling:
+    def min_cluster_size_cut(self: Self, cut_size: float) -> Labelling:
         """
         Computes cluster labels and membership probabilities at the given cut
         size threshold (cut_size) in a left-open (birth, death] size interval.
@@ -502,8 +518,8 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             vectors.
         """
         check_is_fitted(self, "_leaf_tree")
-        selected_clusters = api.apply_size_cut(self._leaf_tree, cut_size)
-        return api.compute_cluster_labels(
+        selected_clusters = apply_size_cut(self._leaf_tree, cut_size)
+        return compute_cluster_labels(
             self._leaf_tree, self._condensed_tree, selected_clusters, self._num_points
         )
 
@@ -512,7 +528,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         # Check kNN / MST inputs
         if isinstance(X, tuple):
             if isinstance(X[1], np.ndarray):
-                return api.knn_to_csr(*self._check_knn(X)), X[0].shape[0], True, False
+                return knn_to_csr(*self._check_knn(X)), X[0].shape[0], True, False
             else:
                 edges, num_points = self._check_mst(X)
                 return edges, num_points, True, True
@@ -540,9 +556,9 @@ class PLSCAN(ClusterMixin, BaseEstimator):
 
         # Convert to valid CSR format
         if issparse(X):
-            X = api.remove_self_loops(X)
+            X = remove_self_loops(X)
         else:
-            X = api.distance_matrix_to_csr(X, copy=copy)
+            X = distance_matrix_to_csr(X, copy=copy)
         return X, X.shape[0], False, False
 
     def _check_knn(self: Self, X):

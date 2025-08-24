@@ -27,7 +27,7 @@ author = "Jelmer Bot"
 # -- General configuration ---------------------------------------------------
 
 release = get_version("plscan")
-version = release
+version = '.'.join(release.split('.')[:2])
 master_doc = "index"
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]

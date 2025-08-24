@@ -117,6 +117,9 @@ NB_MODULE(_labelling_ext, m) {
             );
           },
           nb::arg("label"), nb::arg("probability"),
+          nb::sig("def __init__(self, label: np.ndarray[tuple[int], "
+                  "np.dtype[np.float32]], probability: np.ndarray[tuple[int], "
+                  "np.dtype[np.float32]]) -> None"),
           R"(
             Parameters
             ----------
