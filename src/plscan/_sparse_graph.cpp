@@ -140,11 +140,30 @@ NB_MODULE(_sparse_graph, m) {
                 nb::cast<array_ref<int32_t const>>(asarray(indptr), false)
             );
           },
-          nb::arg("data"), nb::arg("indices"), nb::arg("indptr")
+          nb::arg("data"), nb::arg("indices"), nb::arg("indptr"),
+          R"(
+          Parameters
+          ----------
+          data
+              An array of distances.
+          indices
+              An array of column indices.
+          indptr
+              The CSR indptr array.
+          )"
       )
-      .def_ro("data", &SparseGraph::data, nb::rv_policy::reference)
-      .def_ro("indices", &SparseGraph::indices, nb::rv_policy::reference)
-      .def_ro("indptr", &SparseGraph::indptr, nb::rv_policy::reference)
+      .def_ro(
+          "data", &SparseGraph::data, nb::rv_policy::reference,
+          "A 1D array with data values."
+      )
+      .def_ro(
+          "indices", &SparseGraph::indices, nb::rv_policy::reference,
+          "A 1D array with indices values."
+      )
+      .def_ro(
+          "indptr", &SparseGraph::indptr, nb::rv_policy::reference,
+          "A 1D array with indptr values."
+      )
       .def(
           "__iter__",
           [](SparseGraph const &self) {
@@ -161,18 +180,7 @@ NB_MODULE(_sparse_graph, m) {
             );
           }
       )
-      .doc() = R"(
-        SparseGraph contains a (square) distance matrix in CSR format.
-
-        Parameters
-        ----------
-        data : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            An array of distances.
-        indices : numpy.ndarray[tuple[int], np.dtype[np.int64]]
-            An array of column indices.
-        indptr : numpy.ndarray[tuple[int], np.dtype[np.uint64]]
-            The CSR indptr array.
-      )";
+      .doc() = "SparseGraph contains a (square) distance matrix in CSR format.";
 
   m.def(
       "extract_core_distances", &extract_core_distances, nb::arg("graph"),
@@ -182,16 +190,16 @@ NB_MODULE(_sparse_graph, m) {
 
           Parameters
           ----------
-          graph : plscan._sparse_graph.SparseGraph
+          graph
                 The sparse graph to extract core distances from.
-          min_samples : int
+          min_samples
                 The number of nearest neighbors to consider for core distance.
-          is_sorted : bool
+          is_sorted
                 Whether the rows of the graph are sorted by distance.
 
           Returns
           -------
-          core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
+          core_distances
                 An array of core distances.
         )"
   );
@@ -205,14 +213,14 @@ NB_MODULE(_sparse_graph, m) {
 
           Parameters
           ----------
-          graph : plscan._sparse_graph.SparseGraph
+          graph
                 The sparse graph to extract core distances from.
-          core_distances : numpy.ndarray[tuple[int], np.dtype[np.float32]]
+          core_distances
                 An array of core distances, one for each point in the graph.
 
           Returns
           -------
-          mutual_graph : plscan._sparse_graph.SparseGraph
+          mutual_graph
                 A new sparse graph with mutual reachability distances. Rows are
                 sorted by mutual reachability distance.
         )"

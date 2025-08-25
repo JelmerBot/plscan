@@ -2,378 +2,64 @@
 
 #include "_array.h"
 
+template <Metric metric>
+nb::object wrap_dist(nb::dict const metric_kws) {
+  return nb::cpp_function([dist = get_dist<metric>(metric_kws)](
+                              array_ref<float const> const x,
+                              array_ref<float const> const y
+                          ) { return dist(to_view(x), to_view(y)); });
+}
+
 NB_MODULE(_distances, m) {
   m.doc() = "Module for distance computation in PLSCAN.";
-
   m.def(
-      "euclidean",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Euclidean>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Euclidean distance between two 1D vectors.
+      "get_dist",
+      [](char const *const metric, nb::kwargs const metric_kws) {
+        static std::map<Metric, nb::object (*)(nb::dict)> lookup = {
+            {Metric::Euclidean, wrap_dist<Metric::Euclidean>},
+            {Metric::Cityblock, wrap_dist<Metric::Cityblock>},
+            {Metric::Chebyshev, wrap_dist<Metric::Chebyshev>},
+            {Metric::Minkowski, wrap_dist<Metric::Minkowski>},
+            {Metric::Hamming, wrap_dist<Metric::Hamming>},
+            {Metric::Braycurtis, wrap_dist<Metric::Braycurtis>},
+            {Metric::Canberra, wrap_dist<Metric::Canberra>},
+            {Metric::Haversine, wrap_dist<Metric::Haversine>},
+            {Metric::SEuclidean, wrap_dist<Metric::SEuclidean>},
+            {Metric::Mahalanobis, wrap_dist<Metric::Mahalanobis>},
+            {Metric::Dice, wrap_dist<Metric::Dice>},
+            {Metric::Jaccard, wrap_dist<Metric::Jaccard>},
+            {Metric::Russellrao, wrap_dist<Metric::Russellrao>},
+            {Metric::Rogerstanimoto, wrap_dist<Metric::Rogerstanimoto>},
+            {Metric::Sokalsneath, wrap_dist<Metric::Sokalsneath>}
+        };
+        if (auto const it = lookup.find(parse_metric(metric));
+            it != lookup.end())
+          return it->second(metric_kws);
 
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Euclidean distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "cityblock",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Cityblock>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Cityblock distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Cityblock distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "chebyshev",
-      [](array_ref<float> const u, array_ref<float> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Chebyshev>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Chebyshev distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Chebyshev distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "minkowski",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Minkowski>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Minkowski distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-        p : float
-            The order of the Minkowski distance. Keyword only!
-
-        Returns
-        -------
-        distance : float
-            The Minkowski distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "hamming",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Hamming>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Hamming distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Hamming distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "braycurtis",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Braycurtis>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Braycurtis distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Braycurtis distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "canberra",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Canberra>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Canberra distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Canberra distance between the two vectors.
-        )"
-  );
-  m.def(
-      "haversine",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Haversine>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Haversine distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector. Only the first two values are used,
-            which must be latitude and longitude in radians.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector. Only the first two values are used,
-            which must be latitude and longitude in radians.
-
-        Returns
-        -------
-        distance : float
-            The Haversine distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "seuclidean",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::SEuclidean>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        SEuclidean distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-        V : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The variance vector for the SEuclidean distance. This is used to
-            scale the distance based on the variance of the coordinates.
-
-        Returns
-        -------
-        distance : float
-            The SEuclidean distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "mahalanobis",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Mahalanobis>(metric_kws)(
-            to_view(u), to_view(v)
+        throw nb::value_error(  //
+            nb::str("Unsupported metric: {}").format(metric).c_str()
         );
       },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
+      nb::arg("metric"), nb::arg("metric_kws"),
       R"(
-        Mahalanobis distance between two 1D vectors.
+        Retrieves the specified distance metric callback.
 
         Parameters
         ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-        VI : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The inverse covariance matrix for the Mahalanobis distance.
+        metric
+          The name of the metric to use. See :py:attr:`~plscan.PLSCAN.VALID_BALLTREE_METRICS` 
+          for a list of valid metrics.
+        **metric_kws
+          p: The order of the Minkowski distance. Required if `metric` is "minkowski".
+          V: The variance vector for the standardized Euclidean distance. Required if 
+          `metric` is "seuclidean".
+          VI: The inverse covariance matrix for the Mahalanobis distance. Required if 
+          `metric` is "mahalanobis".
 
         Returns
         -------
-        distance : float
-            The Mahalanobis distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "dice",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Dice>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Dice distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-        Returns
-        -------
-        distance : float
-            The Dice distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "jaccard",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Jaccard>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Jaccard distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-        Returns
-        -------
-        distance : float
-            The Jaccard distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "russellrao",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Russellrao>(metric_kws)(to_view(u), to_view(v));
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Russellrao distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Russellrao distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "rogerstanimoto",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Rogerstanimoto>(metric_kws)(
-            to_view(u), to_view(v)
-        );
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Rogerstanimoto distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Rogerstanimoto distance between the two vectors.
-        )"
-  );
-
-  m.def(
-      "sokalsneath",
-      [](array_ref<float const> const u, array_ref<float const> const v,
-         nb::kwargs const metric_kws) {
-        return get_dist<Metric::Sokalsneath>(metric_kws)(
-            to_view(u), to_view(v)
-        );
-      },
-      nb::arg("u").noconvert(), nb::arg("v").noconvert(), nb::arg("metric_kws"),
-      R"(
-        Sokalsneath distance between two 1D vectors.
-
-        Parameters
-        ----------
-        u : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The first input vector.
-        b : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The second input vector.
-
-        Returns
-        -------
-        distance : float
-            The Sokalsneath distance between the two vectors.
-        )"
+        dist
+            The distance function callback. Its input arrays must be c-contiguous.
+      )"
   );
 }

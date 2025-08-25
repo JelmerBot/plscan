@@ -1,4 +1,4 @@
-#include "_condense_tree.h"
+#include "_condensed_tree.h"
 
 #include <nanobind/stl/optional.h>
 
@@ -225,7 +225,7 @@ CondensedTree compute_condensed_tree(
   return {tree_view, std::move(tree_cap), filled_edges, cluster_count};
 }
 
-NB_MODULE(_condense_tree, m) {
+NB_MODULE(_condensed_tree, m) {
   m.doc() = "Module for condensed tree computation in PLSCAN.";
 
   nb::class_<CondensedTree>(m, "CondensedTree")
@@ -248,16 +248,43 @@ NB_MODULE(_condense_tree, m) {
             );
           },
           nb::arg("parent"), nb::arg("child"), nb::arg("distance"),
-          nb::arg("child_size"), nb::arg("cluster_rows")
+          nb::arg("child_size"), nb::arg("cluster_rows"),
+          R"(
+            Parameters
+            ----------
+            parent
+                An array of parent cluster indices. Clusters are labelled
+                with indices starting from the number of points.
+            child
+                An array of child node and cluster indices. Clusters are labelled
+                with indices starting from the number of points.
+            distance
+                The distance at which the child side connects to the parent side.
+            child_size
+                The (weighted) size in the child side of the link.
+            cluster_rows
+                The row indices with a cluster as child.
+          )"
       )
-      .def_ro("parent", &CondensedTree::parent, nb::rv_policy::reference)
-      .def_ro("child", &CondensedTree::child, nb::rv_policy::reference)
-      .def_ro("distance", &CondensedTree::distance, nb::rv_policy::reference)
       .def_ro(
-          "child_size", &CondensedTree::child_size, nb::rv_policy::reference
+          "parent", &CondensedTree::parent, nb::rv_policy::reference,
+          "A 1D array of parent cluster indices."
       )
       .def_ro(
-          "cluster_rows", &CondensedTree::cluster_rows, nb::rv_policy::reference
+          "child", &CondensedTree::child, nb::rv_policy::reference,
+          "A 1D array of child cluster indices."
+      )
+      .def_ro(
+          "distance", &CondensedTree::distance, nb::rv_policy::reference,
+          "A 1D array of distances."
+      )
+      .def_ro(
+          "child_size", &CondensedTree::child_size, nb::rv_policy::reference,
+          "A 1D array of child sizes."
+      )
+      .def_ro(
+          "cluster_rows", &CondensedTree::cluster_rows,
+          nb::rv_policy::reference, "A 1D array of cluster row indices."
       )
       .def(
           "__iter__",
@@ -281,24 +308,7 @@ NB_MODULE(_condense_tree, m) {
             );
           }
       )
-      .doc() = R"(
-        CondensedTree contains a pruned dendrogram.
-
-        Parameters
-        ----------
-        parent : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            An array of parent cluster indices. Clusters are labelled
-            with indices starting from the number of points.
-        child : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            An array of child node and cluster indices. Clusters are labelled
-            with indices starting from the number of points.
-        distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The distance at which the child side connects to the parent side.
-        child_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The (weighted) size in the child side of the link.
-        cluster_rows : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            The row indices with a cluster as child.
-      )";
+      .doc() = "CondensedTree contains a pruned dendrogram.";
 
   m.def(
       "compute_condensed_tree", &compute_condensed_tree,
@@ -310,21 +320,21 @@ NB_MODULE(_condense_tree, m) {
 
         Parameters
         ----------
-        spanning_tree : plscan._spanning_tree.SpanningTree
-            The input minimum spanning tree (sorted).
-        linkage_tree : plscan._linkage_tree.LinkageTree
+        linkage_tree
             The input linkage tree. Must originate from and have the same size
             as the spanning tree.
-        min_cluster_size : float, optional
+        spanning_tree
+            The input minimum spanning tree (sorted).
+        min_cluster_size
             The minimum size of clusters to be included in the condensed tree.
             Default is 5.0.
-        sample_weights : numpy.ndarray[tuple[int], np.dtype[np.float32]], optional
-            The data point sample weights. If not provided, all points get an
-            equal weight. Must have a value for each data point!
+        sample_weights
+            The data point sample weights. If not provided, all
+            points get an equal weight. Must have a value for each data point!
 
         Returns
         -------
-        condensed_tree : plscan._condensed_tree.CondensedTree
+        condensed_tree
             A CondensedTree with parent, child, distance, child_size,
             and cluster_rows arrays. The child_size array contains the
             (weighted) size of the child cluster, which is the sum of the

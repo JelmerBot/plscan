@@ -8,25 +8,62 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'LICENSE'
-      - 'README.md'
-      - 'CMakeLists.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/build_wheels.yml'
 
 jobs:
-  run_linters:
-    uses: ./.github/workflows/_run_linters.yml
-    secrets: inherit
+  pre_build:
+    name: Check file changes
+    runs-on: ubuntu-latest
     permissions:
       checks: write
-      contents: write
-      pull-requests: write
+      contents: read
+      pull-requests: read
+    outputs:
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
+      cache-key: ${{ steps.cache.outputs.cache-primary-key }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install linters
+        run: pip install black[jupyter]==25.1 
+      - uses: wearerequired/lint-action@v2
+        with:
+          black: true
+          black_args: "--color --diff"
+          black_extensions: py, ipynb
+          continue_on_error: false
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          key: wheels-${{ hashFiles('src/**', 'tests/**', 'pyproject.toml', 'CMakeLists.txt', '.github/workflows/_build_wheels.yml') }}
+          path: /dev/null
+          lookup-only: true
 
   build_wheels:
-    needs: run_linters
+    name: Build wheels
+    needs: pre_build
+    if: needs.pre_build.outputs.cache-hit != 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/_build_wheels.yml
     secrets: inherit
+
+  pr_status:
+    name: PR status
+    needs: [pre_build, build_wheels]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Workflow Status
+        run: |
+          exit_on_result() {
+            if [[ "$2" == "failure" || "$2" == "cancelled" ]]; then
+              echo "Job '$1' failed or was cancelled."
+              exit 1
+            fi
+          }
+          exit_on_result "pre_build" "${{ needs.pre_build.result }}"
+          exit_on_result "build_wheels" "${{ needs.build_wheels.result }}"
+      - uses: actions/cache/save@v4
+        if: needs.pre_build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ needs.pre_build.outputs.cache-key }}
+          path: /dev/null

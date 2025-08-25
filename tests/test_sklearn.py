@@ -154,8 +154,8 @@ def test_sparse_matrix(X, g_knn):
 # Feature vector inputs with metrics valid in both space trees
 
 
-@pytest.mark.parametrize("metric", PLSCAN.valid_kdtree_metrics)
-@pytest.mark.parametrize("space_tree", ["kdtree", "balltree"])
+@pytest.mark.parametrize("metric", PLSCAN.VALID_KDTREE_METRICS)
+@pytest.mark.parametrize("space_tree", ["kd_tree", "ball_tree"])
 def test_kdtree_l1_l2(X, metric, space_tree):
     # Fill in defaults for parameterized metrics
     metric_kws = dict()
@@ -231,8 +231,8 @@ def test_balltree_boolean_metrics(X_bool, metric):
 
 @pytest.mark.parametrize(
     "space_tree,metric",
-    [("kdtree", m) for m in PLSCAN.valid_kdtree_metrics]
-    + [("balltree", m) for m in numerical_balltree_metrics],
+    [("kd_tree", m) for m in PLSCAN.VALID_KDTREE_METRICS]
+    + [("ball_tree", m) for m in numerical_balltree_metrics],
 )
 def test_equal_core_distances(X, space_tree, metric):
     if metric == "braycurtis":
@@ -275,9 +275,9 @@ def test_equal_core_distances_boolean(X_bool, metric):
 def test_bad_space_tree(X):
     with pytest.raises(InvalidParameterError):
         PLSCAN(space_tree="bla").fit(X)
-    for metric in set(PLSCAN.valid_balltree_metrics) - set(PLSCAN.valid_kdtree_metrics):
+    for metric in set(PLSCAN.VALID_BALLTREE_METRICS) - set(PLSCAN.VALID_KDTREE_METRICS):
         with pytest.raises(InvalidParameterError):
-            PLSCAN(space_tree="kdtree", metric=metric).fit(X)
+            PLSCAN(space_tree="kd_tree", metric=metric).fit(X)
 
 
 def test_bad_metrics(X):
@@ -400,8 +400,9 @@ def test_bad_min_samples(knn):
         PLSCAN(metric="precomputed", min_samples=None).fit(knn)
 
 
-def test_use_bi_persistence(X, knn):
-    c = PLSCAN(metric="precomputed", use_bi_persistence=True).fit(knn)
+@pytest.mark.parametrize("persistence_measure", ["size-density", "size-distance"])
+def test_persistence_measure(X, knn, persistence_measure):
+    c = PLSCAN(metric="precomputed", persistence_measure=persistence_measure).fit(knn)
 
     valid_spanning_forest(c._minimum_spanning_tree, X)
     valid_mutual_graph(c._mutual_graph, X, missing=True)
@@ -417,17 +418,17 @@ def test_use_bi_persistence(X, knn):
     valid_linkage(c._linkage_tree, X)
 
 
-def test_bad_use_bi_persistence(knn):
+def test_bad_persistence_measure(knn):
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=1).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=1).fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=2.0).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=2.0).fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence="bla").fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure="bla").fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=[0.1, 0.2]).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=[0.1, 0.2]).fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=None).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=None).fit(knn)
 
 
 def test_num_threads(X, knn):
@@ -514,7 +515,7 @@ def test_export_pandas(knn):
     c = PLSCAN(metric="precomputed").fit(knn)
     df = c.condensed_tree_.to_pandas()
     assert isinstance(df, pd.DataFrame)
-    assert df.shape == (c._condensed_tree.parent.size, 4)
+    assert df.shape == (c._condensed_tree.parent.size, 5)
     df = c.leaf_tree_.to_pandas()
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (c._leaf_tree.parent.size, 5)

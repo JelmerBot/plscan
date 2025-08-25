@@ -98,14 +98,38 @@ NB_MODULE(_linkage_tree, m) {
               array_ref<uint32_t const>, array_ref<uint32_t const>,
               array_ref<uint32_t const>, array_ref<float const>>(),
           nb::arg("parent").noconvert(), nb::arg("child").noconvert(),
-          nb::arg("child_count").noconvert(), nb::arg("child_size").noconvert()
+          nb::arg("child_count").noconvert(), nb::arg("child_size").noconvert(),
+          R"(
+            Parameters
+            ----------
+            parent
+                An array of parent node and cluster indices. Clusters are
+                labelled with indices starting from the number of points.
+            child
+                An array of child node and cluster indices. Clusters are labelled
+                with indices starting from the number of points.
+            child_count
+                The number of points contained in the child side of the link.
+            child_size
+                The (weighted) size in the child side of the link.
+          )"
       )
-      .def_ro("parent", &LinkageTree::parent, nb::rv_policy::reference)
-      .def_ro("child", &LinkageTree::child, nb::rv_policy::reference)
       .def_ro(
-          "child_count", &LinkageTree::child_count, nb::rv_policy::reference
+          "parent", &LinkageTree::parent, nb::rv_policy::reference,
+          "A 1D array with parent values. "
       )
-      .def_ro("child_size", &LinkageTree::child_size, nb::rv_policy::reference)
+      .def_ro(
+          "child", &LinkageTree::child, nb::rv_policy::reference,
+          "A 1D array with child values. "
+      )
+      .def_ro(
+          "child_count", &LinkageTree::child_count, nb::rv_policy::reference,
+          "A 1D array with child_count values. "
+      )
+      .def_ro(
+          "child_size", &LinkageTree::child_size, nb::rv_policy::reference,
+          "A 1D array with child_size values. "
+      )
       .def(
           "__iter__",
           [](LinkageTree const &self) {
@@ -127,22 +151,7 @@ NB_MODULE(_linkage_tree, m) {
             );
           }
       )
-      .doc() = R"(
-        LinkageTree contains a single-linkage dendrogram.
-
-        Parameters
-        ----------
-        parent : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            An array of parent node and cluster indices. Clusters are
-            labelled with indices starting from the number of points.
-        child : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            An array of child node and cluster indices. Clusters are labelled
-            with indices starting from the number of points.
-        child_count : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            The number of points contained in the child side of the link.
-        child_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The (weighted) size in the child side of the link.
-      )";
+      .doc() = "LinkageTree contains a single-linkage dendrogram.";
 
   m.def(
       "compute_linkage_tree", &compute_linkage_tree,
@@ -154,18 +163,18 @@ NB_MODULE(_linkage_tree, m) {
 
         Parameters
         ----------
-        minimum_spanning_tree : plscan._spanning_tree.SpanningTree
+        minimum_spanning_tree
             The SpanningTree containing the (sorted/partial) minimum spanning
             tree.
-        num_points : int
+        num_points
             The number of data points in the data set.
-        sample_weights : numpy.ndarray[tuple[int], np.dtype[np.float32]], optional
+        sample_weights
             The data point sample weights. If not provided, all points
             get an equal weight.
 
         Returns
         -------
-        tree : plscan._linkage_tree.LinkageTree
+        tree
             A LinkageTree containing the parent, child, child_count,
             and child_size arrays of the single-linkage dendrogram.
             Count refers to the number of data points in the child

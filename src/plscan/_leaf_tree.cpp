@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "_condense_tree.h"
+#include "_condensed_tree.h"
 
 void fill_min_dist(
     LeafTreeWriteView leaf_tree, CondensedTreeView const condensed_tree,
@@ -138,7 +138,8 @@ NB_MODULE(_leaf_tree, m) {
              nb::handle max_distance, nb::handle min_size,
              nb::handle max_size) {
             // Support np.memmap and np.ndarray input types for sklearn
-            // pickling. The output of np.asarray can cast to nanobind ndarrays.
+            // pickling. The output of np.asarray can cast to nanobind
+            // ndarrays.
             auto const asarray = nb::module_::import_("numpy").attr("asarray");
             new (t) LeafTree(
                 nb::cast<array_ref<uint32_t const>>(asarray(parent), false),
@@ -149,13 +150,49 @@ NB_MODULE(_leaf_tree, m) {
             );
           },
           nb::arg("parent"), nb::arg("min_distance"), nb::arg("max_distance"),
-          nb::arg("min_size"), nb::arg("max_size")
+          nb::arg("min_size"), nb::arg("max_size"),
+          R"(
+            Parameters
+            ----------
+            parent
+                The parent cluster IDs.
+            min_distance
+                The minimum distance at which the cluster ID exists in the
+                condensed tree. The leaf-cluster represented by the cluster ID
+                may exist at smaller distances because it can contain points of
+                its descendants.
+            max_distance
+                The distance at which the cluster connects to its parent in the
+                condensed tree and leaf tree.
+            min_size
+                The min_cluster_size at which the cluster becomes a leaf.
+            max_size
+                The min_cluster_size at which the cluster stops being a leaf.
+          )"
       )
-      .def_ro("parent", &LeafTree::parent, nb::rv_policy::reference)
-      .def_ro("min_distance", &LeafTree::min_distance, nb::rv_policy::reference)
-      .def_ro("max_distance", &LeafTree::max_distance, nb::rv_policy::reference)
-      .def_ro("min_size", &LeafTree::min_size, nb::rv_policy::reference)
-      .def_ro("max_size", &LeafTree::max_size, nb::rv_policy::reference)
+      .def_ro(
+          "parent", &LeafTree::parent, nb::rv_policy::reference,
+          "A 1D array with parent cluster IDs."
+      )
+      .def_ro(
+          "min_distance", &LeafTree::min_distance, nb::rv_policy::reference,
+          "A 1D array with minimum leaf cluster distances. I.e., the minimum "
+          "distance at which the cluster ID exists in the condensed tree. The "
+          "leaf-cluster represented by the cluster ID may exist at smaller "
+          "distances because it can contain points of its children."
+      )
+      .def_ro(
+          "max_distance", &LeafTree::max_distance, nb::rv_policy::reference,
+          "A 1D array with maximum leaf cluster distances."
+      )
+      .def_ro(
+          "min_size", &LeafTree::min_size, nb::rv_policy::reference,
+          "A 1D array with minimum leaf cluster sizes."
+      )
+      .def_ro(
+          "max_size", &LeafTree::max_size, nb::rv_policy::reference,
+          "A 1D array with maximum leaf cluster sizes."
+      )
       .def(
           "__iter__",
           [](LeafTree const &self) {
@@ -182,20 +219,7 @@ NB_MODULE(_leaf_tree, m) {
         LeafTree lists information for the clusters in a condensed tree.
 
         Indexing with [cluster_id - num_points] gives information for the
-        cluster with cluster_id.
-
-        Parameters
-        ----------
-        parent : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
-            The parent cluster IDs.
-        min_distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The minimum distance at which the cluster exists.
-        max_distance : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The distance at which the cluster connects to its parent.
-        min_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The min_cluster_size at which the cluster becomes a leaf.
-        max_size : numpy.ndarray[tuple[int], np.dtype[np.float32]]
-            The min_cluster_size at which the cluster stops being a leaf.
+        cluster with cluster_id.        
       )";
 
   m.def(
@@ -206,16 +230,16 @@ NB_MODULE(_leaf_tree, m) {
 
         Parameters
         ----------
-        condensed_tree : plscan._condensed_tree.CondensedTree
+        condensed_tree
             The input condensed tree.
-        num_points : int
+        num_points
             The number of points in the dataset.
-        min_cluster_size : float, optional
+        min_cluster_size
             The minimum size of clusters to be included in the leaf tree.
 
         Returns
         -------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             A LeafTree containing parent, min_distance, max_distance, min_size,
             and max_size arrays. The min/max distance arrays contain each
             cluster's distance range. The min_size and max_size arrays contain
@@ -235,16 +259,16 @@ NB_MODULE(_leaf_tree, m) {
 
         Parameters
         ----------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             The input leaf tree.
-        size_cut : float
+        size_cut
             The size threshold for selecting clusters. The threshold is 
             interpreted as a birth value in a left-open (birth, death] size 
             interval.
 
         Returns
         -------
-        selected_clusters : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
+        selected_clusters
             The cluster IDs for leaf-clusters that exist at the 
             given cut_size threshold. 
       )"
@@ -259,14 +283,14 @@ NB_MODULE(_leaf_tree, m) {
 
         Parameters
         ----------
-        leaf_tree : plscan._leaf_tree.LeafTree
+        leaf_tree
             The input leaf tree.
-        distance_cut : float
+        distance_cut
             The distance threshold for selecting clusters.
 
         Returns
         -------
-        selected_clusters : numpy.ndarray[tuple[int], np.dtype[np.uint32]]
+        selected_clusters
             The cluster IDs for clusters that exist at the given distance 
             threshold. 
       )"

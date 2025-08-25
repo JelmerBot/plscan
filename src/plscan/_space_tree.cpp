@@ -275,12 +275,38 @@ NB_MODULE(_space_tree, m) {
   nb::class_<NodeData>(m, "NodeData")
       .def(
           nb::init<int64_t, int64_t, int64_t, double>(), nb::arg("idx_start"),
-          nb::arg("idx_end"), nb::arg("is_leaf"), nb::arg("radius")
+          nb::arg("idx_end"), nb::arg("is_leaf"), nb::arg("radius"),
+          R"(
+            Parameters
+            ----------
+            idx_start
+                The starting index of the node in the tree.
+            idx_end
+                The ending index of the node in the tree.
+            is_leaf
+                A flag indicating whether the node is a leaf (1) or not (0).
+            radius
+                The radius of the node, used in BallTrees to define the
+                hypersphere that contains the points in the node.
+          )"
       )
-      .def_ro("idx_start", &NodeData::idx_start)
-      .def_ro("idx_end", &NodeData::idx_end)
-      .def_ro("is_leaf", &NodeData::is_leaf)
-      .def_ro("radius", &NodeData::radius)
+      .def_ro(
+          "idx_start", &NodeData::idx_start,
+          "The starting index of the node in the tree."
+      )
+      .def_ro(
+          "idx_end", &NodeData::idx_end,
+          "The ending index of the node in the tree."
+      )
+      .def_ro(
+          "is_leaf", &NodeData::is_leaf,
+          "A flag indicating whether the node is a leaf (1) or not (0)."
+      )
+      .def_ro(
+          "radius", &NodeData::radius,
+          "The radius of the node, used in BallTrees to define the hypersphere "
+          "that contains the points in the node."
+      )
       .def(
           "__iter__",
           [](NodeData const &self) {
@@ -301,21 +327,7 @@ NB_MODULE(_space_tree, m) {
             );
           }
       )
-      .doc() = R"(
-        NodeData represents nodes in sklearn KDTrees and BallTrees.
-
-        Parameters
-        ----------
-        idx_start : int64
-            The starting index of the node in the tree.
-        idx_end : int64
-            The ending index of the node in the tree.
-        is_leaf : int64
-            A flag indicating whether the node is a leaf (1) or not (0).
-        radius : float64
-            The radius of the node, used in BallTrees to define the
-            hypersphere that contains the points in the node.
-      )";
+      .doc() = "NodeData represents nodes in sklearn KDTrees and BallTrees.";
 
   nb::class_<SpaceTree>(m, "SpaceTree")
       .def(
@@ -323,12 +335,38 @@ NB_MODULE(_space_tree, m) {
               ndarray_ref<float const, 2>, array_ref<int64_t const>,
               array_ref<double const>, ndarray_ref<float const, 3>>(),
           nb::arg("data").noconvert(), nb::arg("idx_array").noconvert(),
-          nb::arg("node_data").noconvert(), nb::arg("node_bounds").noconvert()
+          nb::arg("node_data").noconvert(), nb::arg("node_bounds").noconvert(),
+          R"(
+            Parameters
+            ----------
+            data
+                The data feature vectors.
+            idx_array
+                The tree's index array mapping points to tree nodes.
+            node_data
+                A float64 view into the structured :py:class:`~NodeData` array.
+            node_bounds
+                The node bounds, a 3D array (x, num_nodes, num_features),
+                representing the min and max bounds of each node in the feature
+                space.
+          )"
       )
-      .def_ro("data", &SpaceTree::data, nb::rv_policy::reference)
-      .def_ro("idx_array", &SpaceTree::idx_array, nb::rv_policy::reference)
-      .def_ro("node_data", &SpaceTree::node_data, nb::rv_policy::reference)
-      .def_ro("node_bounds", &SpaceTree::node_bounds, nb::rv_policy::reference)
+      .def_ro(
+          "data", &SpaceTree::data, nb::rv_policy::reference,
+          "A 2D array with feature vectors."
+      )
+      .def_ro(
+          "idx_array", &SpaceTree::idx_array, nb::rv_policy::reference,
+          "A 1D array mapping nodes to data points."
+      )
+      .def_ro(
+          "node_data", &SpaceTree::node_data, nb::rv_policy::reference,
+          "A 1D float64 view into a node data array."
+      )
+      .def_ro(
+          "node_bounds", &SpaceTree::node_bounds, nb::rv_policy::reference,
+          "A 3D array with node bounds."
+      )
       .def(
           "__iter__",
           [](SpaceTree const &self) {
@@ -350,27 +388,7 @@ NB_MODULE(_space_tree, m) {
             );
           }
       )
-      .doc() = R"(
-        SpaceTree represents sklearn KDTrees and BallTrees.
-
-        Parameters
-        ----------
-        data : numpy.ndarray[tuple[int, int], np.dtype[np.float32]]
-            The data feature vectors.
-        idx_array : numpy.ndarray[tuple[int], np.dtype[np.int64]]
-            The tree's index array, mapping each points to tree nodes (?).
-        node_data : numpy.ndarray[tuple[int], np.dtype[np.float64]]
-            A float64 view into the structured NodeData array. Each four
-            consecutive values represent a node's data:
-              int64 idx_start,
-              int64 idx_end,
-              int64 is_leaf,
-              float64 radius.
-        node_bounds : numpy.ndarray[tuple[int, int, int], np.dtype[np.float32]]
-            The node bounds, a 3D array with shape (x, num_nodes, num_features),
-            representing the min and max bounds of each node in the feature
-            space.
-      )";
+      .doc() = "SpaceTree represents sklearn KDTrees and BallTrees.";
 
   m.def(
       "check_node_data", &check_node_data, nb::arg("node_data").noconvert(),
@@ -381,17 +399,14 @@ NB_MODULE(_space_tree, m) {
 
         Parameters
         ----------
-        node_data : numpy.ndarray[tuple[int], np.dtype[np.float64]]
-            A flat float64 array view containing node data in the format:
-              int64 idx_start,
-              int64 idx_end,
-              int64 is_leaf,
-              float 64 radius.
+        node_data
+            A flat float64 array view containing :py:class:`~NodeData`.
 
         Returns
         -------
-        List[NodeData]
-            A list of NodeData objects created from the input array.
+        copied_data
+            A list of :py:class:`~NodeData` objects created from the input
+            array.
       )"
   );
 
@@ -403,23 +418,20 @@ NB_MODULE(_space_tree, m) {
 
         Parameters
         ----------
-        tree : plscan._space_tree.SpaceTree
+        tree
             The SpaceTree to query (must be a KDTree!).
-        num_neighbors : int
+        num_neighbors
             The number of nearest neighbors to find.
-        metric : str
-            The distance metric to use. Supported metrics are:
-                "euclidean", "l2",
-                "manhattan", "cityblock", "l1",
-                "chebyshev", "infinity",
-                "minkowski", "p".
-        metric_kws : dict
+        metric
+            The distance metric to use. Supported metrics are listed in
+            :py:attr:`~plscan.PLSCAN.VALID_KDTREE_METRICS`.
+        metric_kws
             Additional keyword arguments for the distance function, such as
             the Minkowski distance parameter `p` for the "minkowski" metric.
 
         Returns
         -------
-        knn : plscan._sparse_graph.SparseGraph
+        knn
             A sparse graph containing the distance-sorted nearest neighbors for
             each point.
       )"
@@ -433,24 +445,20 @@ NB_MODULE(_space_tree, m) {
 
         Parameters
         ----------
-        tree : plscan._space_tree.SpaceTree
+        tree
             The SpaceTree to query (must be a BallTree!).
-        num_neighbors : int
+        num_neighbors
             The number of nearest neighbors to find.
-        metric : str
-            The distance metric to use. Supported
-            metrics are:
-              "euclidean", "l2", "manhattan", "cityblock", "l1", "chebyshev",
-              "infinity", "minkowski", "p", "seuclidean", "hamming", 
-              "braycurtis", "canberra", "haversine", "mahalanobis", "dice", 
-              "jaccard", "russellrao", "rogerstanimoto", "sokalsneath".
-        metric_kws : dict
+        metric
+            The distance metric to use. Supported metrics are listed in
+            :py:attr:`~plscan.PLSCAN.VALID_BALLTREE_METRICS`.
+        metric_kws
             Additional keyword arguments for the distance function, such as
             the Minkowski distance parameter `p` for the "minkowski" metric.
 
         Returns
         -------
-        knn : plscan._sparse_graph.SparseGraph
+        knn
             A sparse graph containing the distance-sorted nearest neighbors for
             each point.
       )"

@@ -1,9 +1,15 @@
 import numpy as np
-from plscan import api
+
+from plscan._sparse_graph import SparseGraph
+from plscan._spanning_tree import SpanningTree
+from plscan._linkage_tree import LinkageTree
+from plscan._condensed_tree import CondensedTree
+from plscan._leaf_tree import LeafTree
+from plscan._persistence_trace import PersistenceTrace
 
 
 def valid_spanning_forest(msf, X):
-    assert isinstance(msf, api.SpanningTree)
+    assert isinstance(msf, SpanningTree)
     assert np.all(np.diff(msf.distance) >= 0.0)
     assert np.all(msf.child >= 0)
     assert np.all(msf.parent >= 0)
@@ -19,7 +25,7 @@ def valid_neighbor_indices(indices, X, min_samples):
 
 
 def valid_mutual_graph(mut_graph, X, *, missing=False):
-    assert isinstance(mut_graph, api.SparseGraph)
+    assert isinstance(mut_graph, SparseGraph)
     assert mut_graph.indptr.shape[0] == X.shape[0] + 1
     if not missing:
         assert np.all(mut_graph.indices >= 0)
@@ -61,7 +67,7 @@ def valid_selected_clusters(selected_clusters, labels):
 
 
 def valid_persistence_trace(persistence_trace):
-    assert isinstance(persistence_trace, api.PersistenceTrace)
+    assert isinstance(persistence_trace, PersistenceTrace)
     assert isinstance(persistence_trace.min_size, np.ndarray)
     assert persistence_trace.min_size.dtype == np.float32
     assert np.all(persistence_trace.min_size >= 2.0)
@@ -71,7 +77,7 @@ def valid_persistence_trace(persistence_trace):
 
 
 def valid_leaf(leaf_tree):
-    assert isinstance(leaf_tree, api.LeafTree)
+    assert isinstance(leaf_tree, LeafTree)
     assert isinstance(leaf_tree.parent, np.ndarray)
     assert leaf_tree.parent.dtype == np.uint32
     assert leaf_tree.parent.max() < leaf_tree.parent.size
@@ -88,7 +94,7 @@ def valid_leaf(leaf_tree):
 
 
 def valid_linkage(linkage_tree, X):
-    assert isinstance(linkage_tree, api.LinkageTree)
+    assert isinstance(linkage_tree, LinkageTree)
     assert isinstance(linkage_tree.parent, np.ndarray)
     assert linkage_tree.parent.dtype == np.uint32
     assert np.all(
@@ -106,7 +112,7 @@ def valid_linkage(linkage_tree, X):
 
 
 def valid_condensed(condensed_tree, X):
-    assert isinstance(condensed_tree, api.CondensedTree)
+    assert isinstance(condensed_tree, CondensedTree)
     assert isinstance(condensed_tree.parent, np.ndarray)
     assert condensed_tree.parent.dtype == np.uint32
     assert isinstance(condensed_tree.child, np.ndarray)
