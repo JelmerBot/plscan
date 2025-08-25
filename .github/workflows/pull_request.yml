@@ -19,7 +19,7 @@ jobs:
       pull-requests: read
     outputs:
       cache-hit: ${{ steps.cache.outputs.cache-hit }}
-      source-hash: ${{ steps.cache.outputs.cache-primary-key }}
+      cache-key: ${{ steps.cache.outputs.cache-primary-key }}
     steps:
       - uses: actions/checkout@v4
       - name: Install linters
@@ -65,5 +65,5 @@ jobs:
       - uses: actions/cache/save@v4
         if: needs.pre_build.outputs.cache-hit != 'true'
         with:
-          key: wheels-${{ needs.pre_build.outputs.source-hash }}
+          key: ${{ needs.pre_build.outputs.cache-key }}
           path: /dev/null
