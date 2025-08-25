@@ -94,7 +94,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         metric=[StrOptions({*VALID_BALLTREE_METRICS, "precomputed"})],
         min_cluster_size=[None, Interval(Real, 2.0, None, closed="left")],
         max_cluster_size=[Interval(Real, 2.0, None, closed="right")],
-        use_bi_persistence=["boolean"],
+        persistence_measure=[StrOptions({"size", "size-distance", "size-density"})],
         num_threads=[None, Interval(Integral, 1, None, closed="left")],
     )
 
@@ -107,7 +107,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         metric_kws: dict[str, Any] | None = None,
         min_cluster_size: float | None = None,
         max_cluster_size: float = np.inf,
-        use_bi_persistence: bool = False,
+        persistence_measure: str = "size",
         num_threads: int | None = None,
     ):
         """
@@ -115,34 +115,43 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         ----------
         min_samples
             The number of neighbors to use for computing core distances and the
-            mutual reachability distances. Higher values produce smoother density
-            profiles with fewer peaks. Minimum spanning tree inputs are assumed to
-            contain mutual reachability distances and ignore this parameter.
+            mutual reachability distances. Higher values produce smoother
+            density profiles with fewer peaks. Minimum spanning tree inputs are
+            assumed to contain mutual reachability distances and ignore this
+            parameter.
         space_tree
-            The type of tree to use for the search. Options are "auto", "kd_tree"
-            and "ball_tree". If "auto", a "kd_tree" is used if that supports the
-            selected metric. Space trees are not used when `metric` is
-            "precomputed".
+            The type of tree to use for the search. Options are "auto",
+            "kd_tree" and "ball_tree". If "auto", a "kd_tree" is used if that
+            supports the selected metric. Space trees are not used when `metric`
+            is "precomputed".
         metric
-            The distance metric to use. See :py:attr:`.PLSCAN.VALID_KDTREE_METRICS`
-            and :py:attr:`.PLSCAN.VALID_BALLTREE_METRICS` for available options. Use
-            "precomputed" if the input to `.fit()` contains distances. See sklearn
-            documentation for metric definitions.
+            The distance metric to use. See
+            :py:attr:`.PLSCAN.VALID_KDTREE_METRICS` and
+            :py:attr:`.PLSCAN.VALID_BALLTREE_METRICS` for available options. Use
+            "precomputed" if the input to `.fit()` contains distances. See
+            sklearn documentation for metric definitions.
         metric_kws
-            Additional keyword arguments for the distance metric. For example, `p`
-            for the Minkowski distance.
+            Additional keyword arguments for the distance metric. For example,
+            `p` for the Minkowski distance.
         min_cluster_size
             The minimum size limit for clusters, defaults to the value of
             min_samples. Values below min_samples are not allowed, as the
-            leaf-clusters produced by those values can be incomplete and arbitrary.
+            leaf-clusters produced by those values can be incomplete and
+            arbitrary.
         max_cluster_size
             The maximum size limit for clusters, by default np.inf.
-        use_bi_persistence
-            Whether to use total bi-persistence or total size-persistence for
-            selecting the optimal minimum cluster size.
+        persistence_measure
+            Selects a persistence measure. Valid options are "size",
+            "size-distance", and "size-density". The "size" option computes the
+            minimum cluster size range for which clusters are leaves. The latter
+            two options compute bi-persistence values over the minimum cluster
+            size and mutual reachability distance / density. (One can think of
+            bi-persistences as an area indicating for which size and distance /
+            density values clusters exist as leaves.) Density is computed as
+            exp(-dist).
         num_threads
-            The number of threads to use for parallel computations, value must be
-            positive. If None, OpenMP's default maximum thread count is used.
+            The number of threads to use for parallel computations, value must
+            be positive. If None, OpenMP's default maximum thread count is used.
         """
         self.min_samples = min_samples
         self.space_tree = space_tree
@@ -150,7 +159,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
         self.metric_kws = metric_kws
         self.min_cluster_size = min_cluster_size
         self.max_cluster_size = max_cluster_size
-        self.use_bi_persistence = use_bi_persistence
+        self.persistence_measure = persistence_measure
         self.num_threads = num_threads
 
     def fit(
@@ -330,7 +339,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             sample_weights=sample_weights,
             min_cluster_size=min_cluster_size,
             max_cluster_size=self.max_cluster_size,
-            use_bi_persistence=self.use_bi_persistence,
+            persistence_measure=self.persistence_measure,
         )
 
         # Reset the number of threads back to the default

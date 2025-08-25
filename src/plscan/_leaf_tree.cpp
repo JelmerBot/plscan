@@ -157,9 +157,13 @@ NB_MODULE(_leaf_tree, m) {
             parent
                 The parent cluster IDs.
             min_distance
-                The minimum distance at which the cluster exists.
+                The minimum distance at which the cluster ID exists in the
+                condensed tree. The leaf-cluster represented by the cluster ID
+                may exist at smaller distances because it can contain points of
+                its descendants.
             max_distance
-                The distance at which the cluster connects to its parent.
+                The distance at which the cluster connects to its parent in the
+                condensed tree and leaf tree.
             min_size
                 The min_cluster_size at which the cluster becomes a leaf.
             max_size
@@ -172,7 +176,10 @@ NB_MODULE(_leaf_tree, m) {
       )
       .def_ro(
           "min_distance", &LeafTree::min_distance, nb::rv_policy::reference,
-          "A 1D array with minimum leaf cluster distances."
+          "A 1D array with minimum leaf cluster distances. I.e., the minimum "
+          "distance at which the cluster ID exists in the condensed tree. The "
+          "leaf-cluster represented by the cluster ID may exist at smaller "
+          "distances because it can contain points of its children."
       )
       .def_ro(
           "max_distance", &LeafTree::max_distance, nb::rv_policy::reference,

@@ -8,6 +8,7 @@
    using_other_distances
    using_multiple_components
    using_sample_weights
+   using_bi_persistences
 
 .. toctree::
    :caption: API reference

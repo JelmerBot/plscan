@@ -7,11 +7,31 @@ from plscan import PLSCAN
 
 
 @image_comparison(
-    baseline_images=["condensed_tree"], extensions=["png"], style="mpl20", tol=5.95
+    baseline_images=["condensed_tree_dist"], extensions=["png"], style="mpl20", tol=5.95
 )
-def test_condensed_tree(knn):
+def test_condensed_tree_dist(knn):
     plt.figure()
-    PLSCAN(metric="precomputed").fit(knn).condensed_tree_.plot()
+    PLSCAN(metric="precomputed").fit(knn).condensed_tree_.plot(select_clusters=True)
+
+
+@image_comparison(
+    baseline_images=["condensed_tree_dens"], extensions=["png"], style="mpl20", tol=5.95
+)
+def test_condensed_tree_dens(knn):
+    plt.figure()
+    PLSCAN(metric="precomputed").fit(knn).condensed_tree_.plot(
+        y="density", select_clusters=True
+    )
+
+
+@image_comparison(
+    baseline_images=["condensed_tree_rank"], extensions=["png"], style="mpl20", tol=5.95
+)
+def test_condensed_tree_rank(knn):
+    plt.figure()
+    PLSCAN(metric="precomputed").fit(knn).condensed_tree_.plot(
+        y="ranks", select_clusters=True
+    )
 
 
 @image_comparison(
@@ -24,9 +44,7 @@ def test_condensed_tree_args(knn):
         cmap="turbo",
         colorbar=False,
         log_size=True,
-        distance_ranks=False,
         label_clusters=True,
-        select_clusters=True,
         selection_palette="tab20",
         continuation_line_kws=dict(color="red"),
         connect_line_kws=dict(linewidth=0.4),

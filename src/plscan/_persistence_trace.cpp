@@ -4,12 +4,13 @@
 #include <nanobind/stl/vector.h>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "_condensed_tree.h"
 #include "_leaf_tree.h"
 
-// -- Compute persistence trace
+// -- General persistence trace computation
 
 size_t initialize_trace(
     PersistenceTraceWriteView result, LeafTreeView const leaf_tree
@@ -71,7 +72,7 @@ void fill_persistences(
 
 [[nodiscard]] std::vector<float> compute_bi_persistences(
     LeafTreeView const leaf_tree, CondensedTreeView const condensed_tree,
-    size_t const num_points
+    size_t const num_points, auto &&distance_callback
 ) {
   // Working variables.
   size_t const num_rows = condensed_tree.size();
@@ -96,8 +97,9 @@ void fill_persistences(
       // birth in (birth, death] intervals!
       if (collected[parent_idx] >= leaf_tree.min_size[parent_idx] &&
           collected[parent_idx] < leaf_tree.max_size[parent_idx])
-        bi_persistences[parent_idx] += leaf_tree.max_distance[parent_idx] -
-                                       distance;
+        bi_persistences[parent_idx] += distance_callback(
+            distance, leaf_tree.max_distance[parent_idx]
+        );
       parent_idx = leaf_tree.parent[parent_idx];
     }
   }
@@ -105,33 +107,20 @@ void fill_persistences(
   return bi_persistences;
 }
 
-size_t fill_size_persistence(
+// --- Size persistence
+
+[[nodiscard]] size_t fill_size_persistence(
     PersistenceTraceWriteView result, LeafTreeView const leaf_tree
 ) {
   nb::gil_scoped_release guard{};
   size_t const trace_size = initialize_trace(result, leaf_tree);
   fill_persistences(
-      result, leaf_tree, trace_size, [leaf_tree](size_t const idx) {
+      result, leaf_tree, trace_size,
+      [leaf_tree](size_t const idx) {
         // skip roots (i.e. direct children of the phantom root)
         return static_cast<float>(leaf_tree.parent[idx] > 0u) *
                (leaf_tree.max_size[idx] - leaf_tree.min_size[idx]);
       }
-  );
-  return trace_size;
-}
-
-size_t fill_bi_persistence(
-    PersistenceTraceWriteView result, LeafTreeView const leaf_tree,
-    CondensedTreeView const condensed_tree, size_t const num_points
-) {
-  nb::gil_scoped_release guard{};
-  size_t const trace_size = initialize_trace(result, leaf_tree);
-  std::vector<float> bi_persistences = compute_bi_persistences(
-      leaf_tree, condensed_tree, num_points
-  );
-  fill_persistences(
-      result, leaf_tree, trace_size,
-      [&bi_persistences](size_t const idx) { return bi_persistences[idx]; }
   );
   return trace_size;
 }
@@ -143,13 +132,67 @@ PersistenceTrace compute_size_persistence(LeafTree const leaf_tree) {
   return PersistenceTrace{trace_view, std::move(trace_cap), trace_size};
 }
 
-PersistenceTrace compute_bi_persistence(
+// --- Size-distance bi-persistence
+
+size_t fill_size_distance_bi_persistence(
+    PersistenceTraceWriteView result, LeafTreeView const leaf_tree,
+    CondensedTreeView const condensed_tree, size_t const num_points
+) {
+  nb::gil_scoped_release guard{};
+  size_t const trace_size = initialize_trace(result, leaf_tree);
+  std::vector<float> bi_persistences = compute_bi_persistences(
+      leaf_tree, condensed_tree, num_points,
+      [](float const min_dist, float const max_dist) {
+        return max_dist - min_dist;
+      }
+  );
+  fill_persistences(
+      result, leaf_tree, trace_size,
+      [&bi_persistences](size_t const idx) { return bi_persistences[idx]; }
+  );
+  return trace_size;
+}
+
+PersistenceTrace compute_size_distance_bi_persistence(
     LeafTree const leaf_tree, CondensedTree const condensed_tree,
     size_t const num_points
 ) {
   size_t const buffer_size = 2 * (leaf_tree.size() - 1u);
   auto [trace_view, trace_cap] = PersistenceTrace::allocate(buffer_size);
-  size_t trace_size = fill_bi_persistence(
+  size_t trace_size = fill_size_distance_bi_persistence(
+      trace_view, leaf_tree.view(), condensed_tree.view(), num_points
+  );
+  return PersistenceTrace{trace_view, std::move(trace_cap), trace_size};
+}
+
+// --- Size-density bi-persistence
+
+size_t fill_size_density_bi_persistence(
+    PersistenceTraceWriteView result, LeafTreeView const leaf_tree,
+    CondensedTreeView const condensed_tree, size_t const num_points
+) {
+  nb::gil_scoped_release guard{};
+  size_t const trace_size = initialize_trace(result, leaf_tree);
+  std::vector<float> bi_persistences = compute_bi_persistences(
+      leaf_tree, condensed_tree, num_points,
+      [](float const min_dist, float const max_dist) {
+        return std::exp(-min_dist) - std::exp(-max_dist);
+      }
+  );
+  fill_persistences(
+      result, leaf_tree, trace_size,
+      [&bi_persistences](size_t const idx) { return bi_persistences[idx]; }
+  );
+  return trace_size;
+}
+
+PersistenceTrace compute_size_density_bi_persistence(
+    LeafTree const leaf_tree, CondensedTree const condensed_tree,
+    size_t const num_points
+) {
+  size_t const buffer_size = 2 * (leaf_tree.size() - 1u);
+  auto [trace_view, trace_cap] = PersistenceTrace::allocate(buffer_size);
+  size_t trace_size = fill_size_density_bi_persistence(
       trace_view, leaf_tree.view(), condensed_tree.view(), num_points
   );
   return PersistenceTrace{trace_view, std::move(trace_cap), trace_size};
@@ -321,10 +364,12 @@ NB_MODULE(_persistence_trace, m) {
   );
 
   m.def(
-      "compute_bi_persistence", &compute_bi_persistence, nb::arg("leaf_tree"),
+      "compute_size_distance_bi_persistence",
+      &compute_size_distance_bi_persistence, nb::arg("leaf_tree"),
       nb::arg("condensed_tree"), nb::arg("num_points"),
       R"(
-        Computes a leaf tree from a condensed tree.
+        Computes a bi-persistence trace for over min_cluster_size and
+        mutual reachability distances.
 
         Parameters
         ----------
@@ -341,7 +386,35 @@ NB_MODULE(_persistence_trace, m) {
             A PersistenceTrace containing arrays for the minimum cluster size
             and total persistence values. The min_size array contains all unique
             min_cluster_sizes at which clusters become leaves. The persistence
-            array contains the total persistence of leaf clusters at those
+            array contains the total bi-persistence of leaf clusters at those
+            minimum size thresholds.
+      )"
+  );
+
+  m.def(
+      "compute_size_density_bi_persistence",
+      &compute_size_density_bi_persistence, nb::arg("leaf_tree"),
+      nb::arg("condensed_tree"), nb::arg("num_points"),
+      R"(
+        Computes a bi-persistence trace for over min_cluster_size and
+        mutual reachability densities.
+
+        Parameters
+        ----------
+        leaf_tree
+            The input leaf tree.
+        condensed_tree
+            The input condensed tree.
+        num_points
+            The number of points in the condensed tree.
+
+        Returns
+        -------
+        persistence_trace
+            A PersistenceTrace containing arrays for the minimum cluster size
+            and total persistence values. The min_size array contains all unique
+            min_cluster_sizes at which clusters become leaves. The persistence
+            array contains the total bi-persistence of leaf clusters at those
             minimum size thresholds.
       )"
   );

@@ -400,8 +400,9 @@ def test_bad_min_samples(knn):
         PLSCAN(metric="precomputed", min_samples=None).fit(knn)
 
 
-def test_use_bi_persistence(X, knn):
-    c = PLSCAN(metric="precomputed", use_bi_persistence=True).fit(knn)
+@pytest.mark.parametrize("persistence_measure", ["size-density", "size-distance"])
+def test_persistence_measure(X, knn, persistence_measure):
+    c = PLSCAN(metric="precomputed", persistence_measure=persistence_measure).fit(knn)
 
     valid_spanning_forest(c._minimum_spanning_tree, X)
     valid_mutual_graph(c._mutual_graph, X, missing=True)
@@ -417,17 +418,17 @@ def test_use_bi_persistence(X, knn):
     valid_linkage(c._linkage_tree, X)
 
 
-def test_bad_use_bi_persistence(knn):
+def test_bad_persistence_measure(knn):
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=1).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=1).fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=2.0).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=2.0).fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence="bla").fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure="bla").fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=[0.1, 0.2]).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=[0.1, 0.2]).fit(knn)
     with pytest.raises(InvalidParameterError):
-        PLSCAN(metric="precomputed", use_bi_persistence=None).fit(knn)
+        PLSCAN(metric="precomputed", persistence_measure=None).fit(knn)
 
 
 def test_num_threads(X, knn):
@@ -514,7 +515,7 @@ def test_export_pandas(knn):
     c = PLSCAN(metric="precomputed").fit(knn)
     df = c.condensed_tree_.to_pandas()
     assert isinstance(df, pd.DataFrame)
-    assert df.shape == (c._condensed_tree.parent.size, 4)
+    assert df.shape == (c._condensed_tree.parent.size, 5)
     df = c.leaf_tree_.to_pandas()
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (c._leaf_tree.parent.size, 5)
