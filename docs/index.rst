@@ -11,6 +11,13 @@
    using_bi_persistences
 
 .. toctree::
+   :caption: Demonstrations
+   :maxdepth: 1
+   :hidden:
+
+   demo_parameter_sensitivity
+
+.. toctree::
    :caption: API reference
    :maxdepth: 1
    :hidden:

@@ -473,7 +473,7 @@ class PLSCAN(ClusterMixin, BaseEstimator):
             peaks = peaks[x[peaks] >= min_size]
         if max_size is not None:
             peaks = peaks[x[peaks] <= max_size]
-        if n_peaks is not None:
+        if n_peaks is not None and len(peaks) > 0:
             peak_idx = -min(n_peaks, len(peaks))
             limit = np.partition(y[peaks], peak_idx)[peak_idx]
             peaks = peaks[y[peaks] >= limit]
