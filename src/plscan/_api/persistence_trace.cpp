@@ -139,9 +139,11 @@ void collect_leaf_children(
   );
 
   // Convert distances to persistences
-  return std::ranges::to<std::vector>(std::views::zip_transform(
-      to_persistence, min_dists, leaf_tree.max_distance
-  ));
+  std::vector<float> persistences(num_leaves);
+  std::ranges::transform(
+      min_dists, leaf_tree.max_distance, persistences.begin(), to_persistence
+  );
+  return persistences;
 }
 
 [[nodiscard]] std::vector<float> compute_bi_persistences(
@@ -181,8 +183,7 @@ void collect_leaf_children(
   nb::gil_scoped_release guard{};
   size_t const trace_size = initialize_trace(result, leaf_tree);
   fill_persistences(
-      result, leaf_tree, trace_size,
-      [leaf_tree](size_t const idx) {
+      result, leaf_tree, trace_size, [leaf_tree](size_t const idx) {
         // skip roots (i.e. direct children of the phantom root)
         return static_cast<float>(leaf_tree.parent[idx] > 0u) *
                (leaf_tree.max_size[idx] - leaf_tree.min_size[idx]);
