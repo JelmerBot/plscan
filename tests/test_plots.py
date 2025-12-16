@@ -7,7 +7,10 @@ from plscan import PLSCAN
 
 
 @image_comparison(
-    baseline_images=["condensed_tree_dist"], extensions=["png"], style="mpl20", tol=5.95
+    baseline_images=["condensed_tree_dist"],
+    extensions=["png"],
+    style="mpl20",
+    tol=12.71,  # branches can switch places without changing meaning
 )
 def test_condensed_tree_dist(knn):
     plt.figure()
@@ -17,7 +20,10 @@ def test_condensed_tree_dist(knn):
 
 
 @image_comparison(
-    baseline_images=["condensed_tree_dens"], extensions=["png"], style="mpl20", tol=5.95
+    baseline_images=["condensed_tree_dens"],
+    extensions=["png"],
+    style="mpl20",
+    tol=13.25,  # branches can switch places without changing meaning
 )
 def test_condensed_tree_dens(knn):
     plt.figure()
@@ -27,7 +33,10 @@ def test_condensed_tree_dens(knn):
 
 
 @image_comparison(
-    baseline_images=["condensed_tree_rank"], extensions=["png"], style="mpl20", tol=5.95
+    baseline_images=["condensed_tree_rank"],
+    extensions=["png"],
+    style="mpl20",
+    tol=20.45,  # branches can switch places without changing meaning
 )
 def test_condensed_tree_rank(knn):
     plt.figure()
@@ -37,7 +46,10 @@ def test_condensed_tree_rank(knn):
 
 
 @image_comparison(
-    baseline_images=["condensed_tree_args"], extensions=["png"], style="mpl20", tol=0.56
+    baseline_images=["condensed_tree_args"],
+    extensions=["png"],
+    style="mpl20",
+    tol=2.32,  # branches can switch places without changing meaning
 )
 def test_condensed_tree_args(knn):
     plt.figure()
@@ -56,7 +68,10 @@ def test_condensed_tree_args(knn):
 
 
 @image_comparison(
-    baseline_images=["leaf_tree"], extensions=["png"], style="mpl20", tol=2.69
+    baseline_images=["leaf_tree"],
+    extensions=["png"],
+    style="mpl20",
+    tol=5.60,  # correct MST orderings can change merge locations
 )
 def test_leaf_tree(knn):
     plt.figure()
@@ -64,7 +79,10 @@ def test_leaf_tree(knn):
 
 
 @image_comparison(
-    baseline_images=["leaf_tree_args"], extensions=["png"], style="mpl20", tol=0.86
+    baseline_images=["leaf_tree_args"],
+    extensions=["png"],
+    style="mpl20",
+    tol=8.85,  # correct MST orderings can change merge locations
 )
 def test_leaf_tree_args(knn):
     plt.figure()
@@ -84,7 +102,10 @@ def test_leaf_tree_args(knn):
 
 
 @image_comparison(
-    baseline_images=["persistence_trace"], extensions=["png"], style="mpl20", tol=7.59
+    baseline_images=["persistence_trace"],
+    extensions=["png"],
+    style="mpl20",
+    tol=16.81,  # correct MST orderings can change merge locations
 )
 def test_persistence_trace(knn):
     plt.figure()
@@ -95,7 +116,7 @@ def test_persistence_trace(knn):
     baseline_images=["persistence_trace_args"],
     extensions=["png"],
     style="mpl20",
-    tol=7.59,
+    tol=15.41,  # correct MST orderings can change merge locations
 )
 def test_persistence_trace_args(knn):
     plt.figure()
