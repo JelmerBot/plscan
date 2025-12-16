@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install deps
-        run: pip install -y numpy scipy matplotlib scikit-learn scikit-build-core nanobind setuptools_scm
+        run: pip install numpy scipy matplotlib scikit-learn scikit-build-core nanobind setuptools_scm
       - name: Install project
         run: pip install --no-deps --no-build-isolation -ve .
       - name: Debug build
