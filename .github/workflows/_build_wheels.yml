@@ -8,16 +8,18 @@ jobs:
     permissions:
       contents: read
     runs-on: ${{ 
-      (matrix.platform == 'macosx' && matrix.arch == 'x64' && 'macosx-15-intel') ||
-      (matrix.platform == 'macosx' && matrix.arch == 'arm64' && 'macosx-latest') ||
+      (matrix.platform == 'macosx' && matrix.arch == 'arm64' && 'macos-latest') ||
       (matrix.platform == 'win' && matrix.arch == 'x64' && 'windows-latest') ||
-      (matrix.platform == 'win' && matrix.arch == 'arm64' && 'windows-11-arm64') ||
-      (endsWith(matrix.platform, 'linux') && matrix.arch == 'x64' && 'ubuntu-latest') || 
-      (endsWith(matrix.platform, 'linux') && matrix.arch == 'arm64' && 'ubuntu-24.04-arm64') }}
+      (endsWith(matrix.platform, 'linux') && matrix.arch == 'x64' && 'ubuntu-latest')}}
     strategy:
       matrix:
-        arch: [x64, arm64]
-        platform: [manylinux, win, macosx]                 # no scikit-learn wheels for musllinux
+        include:                                           # no scikit-learn wheels for musllinux
+          - platform: win                                  # arm64 runners not readily available
+            arch: x64                                      # macos-x64 is deprecated by Apple
+          - platform: manylinux
+            arch: x64
+          - platform: macosx
+            arch: arm64
 
     steps:
       - uses: actions/checkout@v5
