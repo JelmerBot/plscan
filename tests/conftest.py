@@ -1,4 +1,3 @@
-import os
 import pytest
 import numpy as np
 from pathlib import Path
@@ -44,11 +43,9 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(scope="session")
 def X():
-    # X, y = make_blobs(n_samples=200, random_state=10)
-    # X, y = shuffle(X, y, random_state=7)
-    # return StandardScaler().fit_transform(X).astype(np.float32)
-    file_path = os.path.dirname(__file__)
-    return np.load(os.path.join(file_path, "data/X.npy"))
+    X, y = make_blobs(n_samples=200, random_state=10)
+    X, y = shuffle(X, y, random_state=7)
+    return StandardScaler().fit_transform(X).astype(np.float32)
 
 
 @pytest.fixture(scope="session")
