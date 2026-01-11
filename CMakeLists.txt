@@ -32,6 +32,9 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 message(STATUS "Creating a ${CMAKE_BUILD_TYPE} build")
 
+# - Options
+set(PLSCAN_CREATE_STUBS ON CACHE BOOL "Create nanobind stub files for IDE support")
+
 # - Find packages
 find_package(OpenMP REQUIRED CXX)
 find_package(Python 3.10

@@ -14,13 +14,15 @@ nanobind_add_module(${EXT_NAME}
         ${EXT_SOURCES}
 )
 target_link_libraries(${EXT_NAME} PRIVATE compiler_options OpenMP::OpenMP_CXX)
-
-nanobind_add_stub(
-        ${EXT_NAME}_stub
-        MODULE ${EXT_NAME}
-        OUTPUT ${EXT_NAME}.pyi
-        PYTHON_PATH $<TARGET_FILE_DIR:${EXT_NAME}>
-        DEPENDS ${EXT_NAME}
-)
 install(TARGETS ${EXT_NAME} LIBRARY DESTINATION ${SKBUILD_PROJECT_NAME})
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_NAME}.pyi DESTINATION ${SKBUILD_PROJECT_NAME})
+
+if (PLSCAN_CREATE_STUBS)
+        nanobind_add_stub(
+                ${EXT_NAME}_stub
+                MODULE ${EXT_NAME}
+                OUTPUT ${EXT_NAME}.pyi
+                PYTHON_PATH $<TARGET_FILE_DIR:${EXT_NAME}>
+                DEPENDS ${EXT_NAME}
+        )
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_NAME}.pyi DESTINATION ${SKBUILD_PROJECT_NAME})
+endif()
