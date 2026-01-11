@@ -87,13 +87,20 @@ plt.show()
 
 ## Installation instructions
 
-Pre-build binaries are available on [pypi](https://badge.fury.io/py/fast-plscan), so the package can be installed with `pip` and similar package managers on most systems:
+Pre-build binaries are available on [pypi](https://badge.fury.io/py/fast-plscan)
+and [conda-forge](https://anaconda.org/conda-forge/fast-plscan), so the package
+can be installed with `pip`, `conda`, and similar package managers on most
+systems:
 
+```bash
+conda install conda-forge::fast-plscan
+```
+or
 ```bash
 pip install fast_plscan
 ```
 
-Conda forge builds are in progress. See [our
+See [our
 documentation](https://fast-plscan.readthedocs.io/en/latest/local_development.html)
 for instructions on compiling the package locally.
 
